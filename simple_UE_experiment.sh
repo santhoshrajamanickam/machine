@@ -39,8 +39,8 @@ EPSILON=0.99 # Sample stochastically from policy 99% of times, sample unifomly 1
 TRAIN_METHOD='supervised' # Train understander with either 'supervised' or 'rl'
 SAMPLE_TRAIN='gumbel' # In supervised setting we can either use the 'full' attention vector, or sample using 'gumbel'
 SAMPLE_INFER='argmax' # In supervised setting we can either use the 'full' attention vector, sample using 'gumbel' or use 'argmax' ar inference
-INIT_TEMP=2 # (Initial) temperature for gumbel-softmax
-LEARN_TEMP='--learn_temperature' # Whether to learn the temperature as a parameter
+INIT_TEMP=5 # (Initial) temperature for gumbel-softmax
+LEARN_TEMP='conditioned' # Fix temperature with 'no', make it a latent, unconditioned, learnable parameter with 'unconditioned', learn it conditioned on encoder-decoder concatenation with 'conditioned'
 INIT_EXEC_DEC_WITH='new' # Initialize the executor's decoder with it's last encoder, or with a new learable vector
 TRAIN_REGIME='simultaneous' # In 'two-stage' training we first train the executor with hard guidance for n/2 epochs and then the understander for n/2 epochs
                          # In 'simultaneous' training, we train both models together without any supervision on the attention.
@@ -76,4 +76,4 @@ python train_model.py \
     --initial_temperature $INIT_TEMP \
     --init_exec_dec_with $INIT_EXEC_DEC_WITH \
     --train_regime $TRAIN_REGIME \
-    "${LEARN_TEMP}"
+    --learn_temperature $LEARN_TEMP

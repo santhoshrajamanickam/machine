@@ -24,6 +24,7 @@ def _gumbel_softmax_sample(logits, tau, eps):
     dims = logits.dim()
     gumbel_noise = _sample_gumbel(logits.size(), eps=eps, out=logits.data.new())
     y = logits + gumbel_noise
+
     return softmax(y / tau, dims - 1)
 
 

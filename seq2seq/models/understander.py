@@ -53,16 +53,20 @@ class Understander(nn.Module):
         self.sample_train = sample_train
         self.sample_infer = sample_infer
 
-        # Currently the temperature is a single parameter.
-        # In the future we could make it a function of, for example, the same input that the attention
-        # method uses. (concatenation of decoder and encoder states)
-        if learn_temperature:
-            # We use exp to make sure the temperature is always positive. 
-            # To be sure that the initial temperature is actually as specified, we first take the log.
-            self.temperature = nn.Parameter(torch.tensor(initial_temperature))
-            self.temperature_activation = nn.ReLU()
-        else:
-            self.temperature = torch.tensor(initial_temperature)
+        self.learn_temperature = learn_temperature
+        if learn_temperature == 'no':
+            self.temperature = torch.tensor(initial_temperature, requires_grad=False)
+
+        elif learn_temperature == 'unconditioned':
+            self.temperature = nn.Parameter(torch.log(torch.tensor(initial_temperature)), requires_grad=True)
+            self.temperature_activation = torch.exp
+
+        elif learn_temperature == 'conditioned':
+            max_temperature = initial_temperature
+
+            inverse_max_temperature = 1. / max_temperature
+            self.inverse_temperature_estimator = nn.Linear(hidden_dim,1)
+            self.inverse_temperature_activation = lambda inv_temp: torch.log(1 + torch.exp(inv_temp)) + inverse_max_temperature
 
     def forward(self, state, valid_action_mask, max_decoding_length):
         """
@@ -77,8 +81,26 @@ class Understander(nn.Module):
             torch.tensor: [batch_size x max_output_length x max_input_length] tensor containing the probabilities for each decoder step to attend to each encoder step
         """
         encoder_outputs, encoded_hidden = self.encoder(input_variable=state)
-        action_probs = self.decoder(encoder_outputs=encoder_outputs, hidden=encoded_hidden,
+        action_probs, decoder_states = self.decoder(encoder_outputs=encoder_outputs, hidden=encoded_hidden,
                                     output_length=max_decoding_length, valid_action_mask=valid_action_mask)
+
+        if  (self.training and self.sample_train == 'gumbel') or \
+            (not self.training and self.sample_infer == 'gumbel'):
+            if self.learn_temperature == 'no':
+                self.current_temperature = self.temperature
+
+            elif self.learn_temperature == 'unconditioned':
+                self.current_temperature = self.temperature_activation(self.temperature)
+
+            elif self.learn_temperature == 'conditioned':
+                # TODO: (max) decoder length?
+                batch_size          = decoder_states.size(0)
+                max_decoder_length  = decoder_states.size(1)
+                hidden_dim          = decoder_states.size(2)
+
+                estimator_input = decoder_states.view(batch_size * max_decoder_length, hidden_dim)
+                inverse_temperature = self.inverse_temperature_activation(self.inverse_temperature_estimator(estimator_input))
+                self.current_temperature = 1. / inverse_temperature
 
         return action_probs
 
@@ -194,9 +216,8 @@ class Understander(nn.Module):
                     attn = F.softmax(attn.view(-1, n_encoder_states), dim=1).view(batch_size, -1, n_encoder_states)
 
                 elif self.sample_train == 'gumbel':
-                    temperature = self.temperature_activation(self.temperature)
                     attn = F.log_softmax(attn.view(-1, n_encoder_states), dim=1)
-                    attn_hard, attn_soft = gumbel_softmax(logits=attn, hard=True, tau=temperature, eps=1e-20)
+                    attn_hard, attn_soft = gumbel_softmax(logits=attn, hard=True, tau=self.current_temperature, eps=1e-20)
                     attn = attn_hard.view(batch_size, -1, n_encoder_states)
 
             # Inference mode
@@ -205,9 +226,8 @@ class Understander(nn.Module):
                     attn = F.softmax(attn.view(-1, n_encoder_states), dim=1).view(batch_size, -1, n_encoder_states)
 
                 elif self.sample_infer == 'gumbel':
-                    temperature = self.temperature_activation(self.temperature)
                     attn = F.log_softmax(attn.view(-1, n_encoder_states), dim=1)
-                    attn_hard, attn_soft = gumbel_softmax(logits=attn, hard=True, tau=temperature, eps=1e-20)
+                    attn_hard, attn_soft = gumbel_softmax(logits=attn, hard=True, tau=self.current_temperature, eps=1e-20)
                     attn = attn_hard.view(batch_size, -1, n_encoder_states)
 
                 elif self.sample_infer == 'argmax':
@@ -413,6 +433,8 @@ class UnderstanderDecoder(nn.Module):
         # First decoder state should have as prev_hidden th hidden state of the encoder
         decoder_hidden = hidden
 
+        decoder_states_list = []
+
         # TODO: We use rolled out version. If we actually won't use any (informative) input to the decoder
         # we should roll it to save computation time and have cleaner code.
         for decoder_step in range(output_length):
@@ -430,6 +452,9 @@ class UnderstanderDecoder(nn.Module):
                 h = decoder_hidden
             h = h.transpose(0, 1) # make it batch-first
             decoder_states = h
+
+            # Store decoder state to return. Since we have unrolled decoder, we can squeeze the second dimension
+            decoder_states_list.append(decoder_states.squeeze(1))
 
             # apply mlp to all encoder states for current decoder
             # decoder_states --> (batch, dec_seqlen, hl_size)
@@ -470,6 +495,9 @@ class UnderstanderDecoder(nn.Module):
         # Combine the action scores for each decoder step into 1 variable
         action_scores = torch.cat(action_scores_list, dim=1)
 
+        # Combine the decoder state for each decoder step into 1 variable
+        decoder_states = torch.stack(decoder_states_list, dim=1)
+
         # Fill all invalid <pad> encoder states with 0 probability (-inf pre-softmax score)
         invalid_action_mask = valid_action_mask.ne(1).unsqueeze(1).expand(-1, output_length, -1)
         action_scores.masked_fill_(invalid_action_mask, -float('inf'))
@@ -477,4 +505,4 @@ class UnderstanderDecoder(nn.Module):
         # For each decoder step, take the softmax over all actions to get probs
         action_probs = self.output_activation(action_scores)
 
-        return action_probs
+        return action_probs, decoder_states

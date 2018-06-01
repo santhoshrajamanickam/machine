@@ -71,7 +71,7 @@ parser.add_argument('--understander_train_method', type=str, choices=['rl', 'sup
 parser.add_argument('--sample_train', type=str, choices=['full', 'gumbel'], help='When training UE in a supervised setting, we can use the full attention vector or sample using gumbel at training time')
 parser.add_argument('--sample_infer', type=str, choices=['full', 'gumbel', 'argmax'], help='When training UE in a supervised setting, we can use the full attention vector, sample using gumbel, or use argmax at inference time')
 parser.add_argument('--initial_temperature', type=float, default=1, help='(Initial) temperature to use for gumbel-softmax')
-parser.add_argument('--learn_temperature', action='store_true', help='Whether the temperature should be a learnable parameter')
+parser.add_argument('--learn_temperature', type=str, choices=['no', 'unconditioned', 'conditioned'], help='Whether the temperature should be a learnable parameter. And whether it should be conditioned')
 parser.add_argument('--init_exec_dec_with', type=str, choices=['encoder', 'new'], help='The decoder of the executor can be initialized either with its last encoder state, or with a new (learnable) vector')
 parser.add_argument('--train_regime', type=str, choices=['two-stage', 'simultaneous'], help="In 'two-stage' training we first train the executor with hard guidance for n/2 epochs and then the understander for n/2 epochs. In 'simultaneous' training, we train both models together without any supervision on the attention.")
 

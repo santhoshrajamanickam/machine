@@ -235,7 +235,8 @@ class SupervisedTrainer(object):
 
 
         for epoch in range(start_epoch, n_epochs + 1):
-            log.info("Temperature: {}".format(understander_model.temperature.data.item()))
+            if understander_model.current_temperature is not None:
+                log.info("Temperature: {}".format(understander_model.current_temperature.data[0].item()))
 
             log.info("Epoch: %d, Step: %d" % (epoch, step))
 
@@ -348,10 +349,10 @@ class SupervisedTrainer(object):
                 self.optimizer.update(loss_total, epoch)    # TODO check if this makes sense!
                 log_msg += ", Dev set: " + log_
 
+
                 losses, metrics = self.evaluator.evaluate(model, understander_model, data, self.get_batch_data, pre_train=self.pre_train)
                 loss_total, log_, model_name = self.get_losses(losses, metrics, step)
 
-                # TODO: Add understander_optimzer? 
                 log_msg += ", Train set: " + log_
 
                 model.train(mode=True)
