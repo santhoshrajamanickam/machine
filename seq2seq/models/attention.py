@@ -4,8 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..util.gumbel import gumbel_softmax
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Attention(nn.Module):
@@ -44,24 +42,11 @@ class Attention(nn.Module):
 
     """
 
-    def __init__(self, dim, method, sample_train, sample_infer, initial_temperature, learn_temperature):
+    def __init__(self, dim, method, apply_softmax):
         super(Attention, self).__init__()
         self.mask = None
         self.method = self.get_method(method, dim)
-        self.sample_train = sample_train
-        self.sample_infer = sample_infer
-
-        # Currently the temperature is a single parameter.
-        # In the future we could make it a function of, for example, the same input that the attention
-        # method uses. (concatenation of decoder and encoder states)
-        if learn_temperature:
-            # We use exp to make sure the temperature is always positive. 
-            # To be sure that the initial temperature is actually as specified, we first take the log.
-            self.temperature = nn.Parameter(torch.tensor(initial_temperature))
-            self.temperature_activation = nn.ReLU()
-        else:
-            self.temperature = torch.tensor(initial_temperature)
-
+        self.apply_softmax = apply_softmax
 
     def set_mask(self, mask):
         """
@@ -90,32 +75,12 @@ class Attention(nn.Module):
         # apply local mask
         attn.masked_fill_(mask, -float('inf'))
 
-        # We are in training mode
-        if self.training:
-            if self.sample_train == 'full':
-                attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
-
-            elif self.sample_train == 'gumbel':
-                temperature = self.temperature_activation(self.temperature)
-                attn = F.log_softmax(attn.view(-1, input_size), dim=1)
-                attn_hard, attn_soft = gumbel_softmax(logits=attn, hard=True, tau=temperature, eps=1e-20)
-                attn = attn_hard.view(batch_size, -1, input_size)
-
-        # Inference mode
-        else:
-            if self.sample_infer == 'full':
-                attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
-
-            elif self.sample_infer == 'gumbel':
-                temperature = self.temperature_activation(self.temperature)
-                attn = F.log_softmax(attn.view(-1, input_size), dim=1)
-                attn_hard, attn_soft = gumbel_softmax(logits=attn, hard=True, tau=temperature, eps=1e-20)
-                attn = attn_hard.view(batch_size, -1, input_size)
-
-            elif self.sample_infer == 'argmax':
-                argmax = attn.argmax(dim=2, keepdim=True)
-                attn = torch.zeros_like(attn)
-                attn.scatter_(dim=2, index=argmax, value=1)
+        # Only when we are in RL training and in pre-training mode:
+        # we are provided indices and using the Hard attention method.
+        # In all other cases, we are provided an entire vector, use ProvidedAttentionVector method
+        # (possibly) one-hot, and don't need to apply softmax.
+        if self.apply_softmax:
+            attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
 
         # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
         context = torch.bmm(attn, encoder_states)

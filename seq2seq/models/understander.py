@@ -8,6 +8,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical
 
+from ..util.gumbel import gumbel_softmax
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -20,7 +22,7 @@ class Understander(nn.Module):
     Finally, call `finish_episod()` to calculate the discounted rewards and policy loss.
     """
 
-    def __init__(self, rnn_cell, input_vocab_size, embedding_dim, hidden_dim, gamma):
+    def __init__(self, rnn_cell, input_vocab_size, embedding_dim, hidden_dim, gamma, train_method, sample_train, sample_infer, initial_temperature, learn_temperature):
         """
         Args:
             input_vocab_size (int): Total size of the input vocabulary
@@ -46,6 +48,21 @@ class Understander(nn.Module):
 
         self._saved_log_probs = []
         self._rewards = []
+
+        self.train_method = train_method
+        self.sample_train = sample_train
+        self.sample_infer = sample_infer
+
+        # Currently the temperature is a single parameter.
+        # In the future we could make it a function of, for example, the same input that the attention
+        # method uses. (concatenation of decoder and encoder states)
+        if learn_temperature:
+            # We use exp to make sure the temperature is always positive. 
+            # To be sure that the initial temperature is actually as specified, we first take the log.
+            self.temperature = nn.Parameter(torch.tensor(initial_temperature))
+            self.temperature_activation = nn.ReLU()
+        else:
+            self.temperature = torch.tensor(initial_temperature)
 
     def forward(self, state, valid_action_mask, max_decoding_length):
         """
@@ -120,35 +137,86 @@ class Understander(nn.Module):
         # encoder for each decoder
         probabilities = self.forward(state, valid_action_mask, max_decoding_length)
 
-        actions = []
-        for decoder_step in range(max_decoding_length):
-            # Get the probabilities for a single decoder time step
-            # (batch_size x max_encoder_states)
-            probabilities_current_step = probabilities[:, decoder_step, :]
+        # In RL settings, we want to stochastically choose a single action.
+        if self.train_method == 'rl':
+            actions = []
+            for decoder_step in range(max_decoding_length):
+                # Get the probabilities for a single decoder time step
+                # (batch_size x max_encoder_states)
+                probabilities_current_step = probabilities[:, decoder_step, :]
 
-            categorical_distribution_policy = Categorical(probs=probabilities_current_step)
+                # In training mode:
+                # Chance epsilon: Stochastically sample action from the policy
+                # Chance 1-eps:   Stochastically sample action from uniform distribution
+                if self.training:
+                    categorical_distribution_policy = Categorical(probs=probabilities_current_step)
 
-            # Perform epsilon-greed action sampling
-            sample = random.random()
-            # If we don't meet the epsilon threshold, we stochastically sample from the policy
-            if sample <= epsilon:
-                action = categorical_distribution_policy.sample()
-            # Else we sample the actions from a uniform distribution (over the valid actions)
+                    # Perform epsilon-greedy action sampling
+                    sample = random.random()
+                    # If we don't meet the epsilon threshold, we stochastically sample from the policy
+                    if sample <= epsilon:
+                        action = categorical_distribution_policy.sample()
+                    # Else we sample the actions from a uniform distribution (over the valid actions)
+                    else:
+                        # We don't need to normalize these to probabilities, as this is already
+                        # done in Categorical()
+                        uniform_probability_current_step = valid_action_mask.float()
+                        categorical_distribution_uniform = Categorical(
+                            probs=uniform_probability_current_step)
+                        action = categorical_distribution_uniform.sample()
+
+                    log_prob = categorical_distribution_policy.log_prob(action)
+
+                # In inference mode: Just use greedy policy (argmax)
+                else:
+                    prob, action = probabilities_current_step.max(dim=1)
+                    action = action.long()
+                    log_prob = torch.log(prob)
+
+                # Append the action to the list of actions and store the log-probabilities of the chosen actions
+                actions.append(action)
+                self._saved_log_probs.append(log_prob)
+        
+            # Convert list into tensor and make it batch-first
+            actions = torch.stack(actions).transpose(0, 1)
+
+        # In supervised training, we need to have a differentiable sample (at train time)
+        elif self.train_method == 'supervised':
+            attn = probabilities
+
+            batch_size          = attn.size(0)
+            n_decoder_states    = attn.size(1)
+            n_encoder_states    = attn.size(2)
+
+            # We are in training mode
+            if self.training:
+                if self.sample_train == 'full':
+                    attn = F.softmax(attn.view(-1, n_encoder_states), dim=1).view(batch_size, -1, n_encoder_states)
+
+                elif self.sample_train == 'gumbel':
+                    temperature = self.temperature_activation(self.temperature)
+                    attn = F.log_softmax(attn.view(-1, n_encoder_states), dim=1)
+                    attn_hard, attn_soft = gumbel_softmax(logits=attn, hard=True, tau=temperature, eps=1e-20)
+                    attn = attn_hard.view(batch_size, -1, n_encoder_states)
+
+            # Inference mode
             else:
-                # We don't need to normalize these to probabilities, as this is already
-                # done in Categorical()
-                uniform_probability_current_step = valid_action_mask.float()
-                categorical_distribution_uniform = Categorical(
-                    probs=uniform_probability_current_step)
-                action = categorical_distribution_uniform.sample()
+                if self.sample_infer == 'full':
+                    attn = F.softmax(attn.view(-1, n_encoder_states), dim=1).view(batch_size, -1, n_encoder_states)
 
-            # Store the log-probabilities of the chosen actions
-            self._saved_log_probs.append(categorical_distribution_policy.log_prob(action))
+                elif self.sample_infer == 'gumbel':
+                    temperature = self.temperature_activation(self.temperature)
+                    attn = F.log_softmax(attn.view(-1, n_encoder_states), dim=1)
+                    attn_hard, attn_soft = gumbel_softmax(logits=attn, hard=True, tau=temperature, eps=1e-20)
+                    attn = attn_hard.view(batch_size, -1, n_encoder_states)
 
-            actions.append(action)
+                elif self.sample_infer == 'argmax':
+                    argmax = attn.argmax(dim=2, keepdim=True)
+                    attn = torch.zeros_like(attn)
+                    attn.scatter_(dim=2, index=argmax, value=1)
 
-        # Convert list into tensor and make it batch-first
-        actions = torch.stack(actions).transpose(0, 1)
+            # In supervised setting we have as actions the entire attention vector(s)
+            actions = attn
 
         return actions
 

@@ -201,10 +201,6 @@ else:
                          rnn_cell=opt.rnn_cell,
                          eos_id=tgt.eos_id,
                          sos_id=tgt.sos_id,
-                         sample_train=opt.sample_train,
-                         sample_infer=opt.sample_infer,
-                         initial_temperature=opt.initial_temperature,
-                         learn_temperature=opt.learn_temperature,
                          init_exec_dec_with=opt.init_exec_dec_with)
     seq2seq = Seq2seq(encoder, decoder)
     if torch.cuda.is_available():
@@ -227,7 +223,12 @@ understander_model = Understander(
     input_vocab_size=len(src.vocab),
     embedding_dim=opt.embedding_size,
     hidden_dim=hidden_size,
-    gamma=opt.gamma)
+    gamma=opt.gamma,
+    train_method=opt.understander_train_method,
+    sample_train=opt.sample_train,
+    sample_infer=opt.sample_infer,
+    initial_temperature=opt.initial_temperature,
+    learn_temperature=opt.learn_temperature)
 if torch.cuda.is_available():
   understander_model.cuda()
 

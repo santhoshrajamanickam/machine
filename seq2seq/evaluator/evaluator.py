@@ -17,10 +17,12 @@ class Evaluator(object):
         batch_size (int, optional): batch size for evaluator (default: 64)
     """
 
-    def __init__(self, loss=[NLLLoss()], metrics=[WordAccuracy(), SequenceAccuracy()], batch_size=64):
+    def __init__(self, understander_train_method, loss=[NLLLoss()], metrics=[WordAccuracy(), SequenceAccuracy()], batch_size=64):
         self.losses = loss
         self.metrics = metrics
         self.batch_size = batch_size
+
+        self.understander_train_method = understander_train_method
 
     def update_batch_metrics(self, metrics, other, target_variable):
         """
@@ -125,6 +127,10 @@ class Evaluator(object):
                 # If pre-training: Use the provided attention indices in the data set for the model.
                 # Else: Use the actions of the understander as attention vectors. (prepend -1 for SOS)
                 if not pre_train:
+                    # If we are in training mode (of the understander) we should not use the provided attention
+                    # indices, but generate them ourselves.
+                    del target_variable['attention_target']
+
                     # max_len is the maximum number of action the understander has to produce. target_variable holds both SOS and EOS.
                     # Since we do not have to produce action for SOS we substract 1. Note that some examples in the batch might need less actions
                     # then produced. These should however be ignored for loss/metrics
@@ -137,9 +143,16 @@ class Evaluator(object):
                         epsilon=1)
                     understander_model.finish_episode()
 
-                    # Prepend -1 to the actions for the SOS step
-                    batch_size = actions.size(0)
-                    target_variable['attention_target'] = torch.cat([torch.full([batch_size, 1], -1, dtype=torch.long, device=device), actions], dim=1)
+                    # Depending of the train method, we either need single actions, or full attention vectors
+                    if self.understander_train_method == 'rl':
+                        # Prepend -1 to the actions for the SOS step
+                        batch_size = actions.size(0)
+                        target_variable['attention_target'] = torch.cat([torch.full([batch_size, 1], -1, dtype=torch.long, device=device), actions], dim=1)
+
+                    elif self.understander_train_method == 'supervised':
+                        attn = actions
+                        # Add the probabilities to target_variable so that they can be used in the decoder (attention)
+                        target_variable['provided_attention_vectors'] = attn
 
                 decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable)
 

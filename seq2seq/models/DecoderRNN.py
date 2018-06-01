@@ -66,7 +66,7 @@ class DecoderRNN(BaseRNN):
     KEY_SEQUENCE = 'sequence'
 
     def __init__(self, vocab_size, max_len, hidden_size,
-            sos_id, eos_id, sample_train, sample_infer, initial_temperature, learn_temperature, init_exec_dec_with,
+            sos_id, eos_id, init_exec_dec_with,
             n_layers=1, rnn_cell='gru', bidirectional=False,
             input_dropout_p=0, dropout_p=0, use_attention=False, attention_method=None, full_focus=False):
         super(DecoderRNN, self).__init__(vocab_size, max_len, hidden_size,
@@ -98,17 +98,10 @@ class DecoderRNN(BaseRNN):
 
         self.embedding = nn.Embedding(self.output_size, self.hidden_size)
         if use_attention:
-            self.sample_train = sample_train
-            self.sample_infer = sample_infer
-            self.initial_temperature = initial_temperature
-            self.learn_temperature = learn_temperature
             self.attention = Attention(
                 dim=self.hidden_size,
                 method=self.attention_method,
-                sample_train=self.sample_train,
-                sample_infer=self.sample_infer,
-                initial_temperature=self.initial_temperature,
-                learn_temperature=self.learn_temperature)
+                apply_softmax=True)
         else:
             self.attention = None
 
@@ -186,12 +179,16 @@ class DecoderRNN(BaseRNN):
             self.attention.method = self.attention.get_method(
                 dim=self.hidden_size,
                 method='provided_attention_vectors')
+            # We are provided entire attention vectors (possible one-hot) and don't have to apply softmax
+            self.attention.apply_softmax = False
         # When storing a checkpoint, and after training, we will use the evaluator again with normal attention indices,
         # so we must change back the attention method
         if provided_attention is not None:
             self.attention.method = self.attention.get_method(
                 dim=self.hidden_size,
                 method='hard')
+            # We are provided attention vectors from the data and need to apply softmax
+            self.attention.apply_softmax = True
 
         ret_dict = dict()
         if self.use_attention:

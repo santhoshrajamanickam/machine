@@ -46,7 +46,7 @@ class SupervisedTrainer(object):
         self.loss = loss
         self.metrics = metrics
         self.loss_weights = loss_weights or len(loss)*[1.]
-        self.evaluator = Evaluator(loss=self.loss, metrics=self.metrics, batch_size=eval_batch_size)
+        self.evaluator = Evaluator(understander_train_method=understander_train_method, loss=self.loss, metrics=self.metrics, batch_size=eval_batch_size)
         self.optimizer = None
         self.understander_optimizer = None
         self.checkpoint_every = checkpoint_every
@@ -102,17 +102,15 @@ class SupervisedTrainer(object):
                 target_variable['attention_target'] = actions
 
             elif self.understander_train_method == 'supervised':
-                # Get the encoder states that are valid to attend to
-                valid_action_mask = understander_model.get_valid_action_mask(
+                # Make understander select actions (attention vectors)
+                attn = understander_model.select_actions(
                     state=input_variable,
-                    input_lengths=input_lengths)
-                # Fo forward pass of the understander to get all probabilities
-                action_probabilities = understander_model(
-                    state=input_variable,
-                    valid_action_mask=valid_action_mask,
-                    max_decoding_length=max_len)
+                    input_lengths=input_lengths,
+                    max_decoding_length=max_len,
+                    epsilon=self.epsilon)
+
                 # Add the probabilities to target_variable so that they can be used in the decoder (attention)
-                target_variable['provided_attention_vectors'] = action_probabilities
+                target_variable['provided_attention_vectors'] = attn
             
         # Now we perform forward propagation of the model / executor. Attention (targets) are provided
         # by the data or by the understander, depending on the train mode.
@@ -237,7 +235,7 @@ class SupervisedTrainer(object):
 
 
         for epoch in range(start_epoch, n_epochs + 1):
-            log.info("Temperature: {}".format(model.decoder.attention.temperature.data.item()))
+            log.info("Temperature: {}".format(understander_model.temperature.data.item()))
 
             log.info("Epoch: %d, Step: %d" % (epoch, step))
 
