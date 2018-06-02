@@ -124,6 +124,15 @@ class Evaluator(object):
             for batch in batch_iterator:
                 input_variable, input_lengths, target_variable = get_batch_data(batch)
 
+                # We first only do the forward pass of the executor's encoder.
+                # This way, we can use the encoder embeddings and outputs as input to the understander. To use as attn keys
+                executor_encoder_embeddings, executor_encoder_hidden, executor_encoder_outputs = model.forward_encoder(input_variable, input_lengths.tolist())
+
+                possible_attn_keys = {
+                    'executor_encoder_embeddings': executor_encoder_embeddings,
+                    'executor_encoder_outputs': executor_encoder_outputs
+                }
+
                 # If pre-training: Use the provided attention indices in the data set for the model.
                 # Else: Use the actions of the understander as attention vectors. (prepend -1 for SOS)
                 if not pre_train:
@@ -136,11 +145,12 @@ class Evaluator(object):
                     # then produced. These should however be ignored for loss/metrics
                     max_decoding_length = target_variable['decoder_output'].size(1) - 1
 
-                    actions = understander_model.select_actions(
+                    actions, possible_attn_keys = understander_model.select_actions(
                         state=input_variable,
                         input_lengths=input_lengths,
                         max_decoding_length=max_decoding_length,
-                        epsilon=1)
+                        epsilon=1,
+                        possible_attn_keys=possible_attn_keys)
                     understander_model.finish_episode()
 
                     # Depending of the train method, we either need single actions, or full attention vectors
@@ -154,7 +164,19 @@ class Evaluator(object):
                         # Add the probabilities to target_variable so that they can be used in the decoder (attention)
                         target_variable['provided_attention_vectors'] = attn
 
-                decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable)
+                    # Add understander encoder's embeddings and outputs, such that they can possibly be used
+                    # As keys and/or values in the attentino mechanism
+                    target_variable['understander_encoder_embeddings'] = possible_attn_keys['understander_encoder_embeddings']
+                    target_variable['understander_encoder_outputs'] = possible_attn_keys['understander_encoder_outputs']
+                    target_variable['executor_encoder_embeddings'] = possible_attn_keys['executor_encoder_embeddings']
+                    target_variable['executor_encoder_outputs'] = possible_attn_keys['executor_encoder_outputs']
+
+                decoder_outputs, decoder_hidden, other = model.forward_decoder(
+                    target_variables=target_variable,
+                    teacher_forcing_ratio=0,
+                    executor_encoder_embeddings=executor_encoder_embeddings,
+                    encoder_hidden=executor_encoder_hidden,
+                    executor_encoder_outputs=executor_encoder_outputs)
 
                 # Compute metric(s) over one batch
                 metrics = self.update_batch_metrics(metrics, other, target_variable)  

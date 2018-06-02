@@ -66,7 +66,7 @@ class DecoderRNN(BaseRNN):
     KEY_SEQUENCE = 'sequence'
 
     def __init__(self, vocab_size, max_len, hidden_size,
-            sos_id, eos_id, init_exec_dec_with,
+            sos_id, eos_id, init_exec_dec_with, attn_vals,
             n_layers=1, rnn_cell='gru', bidirectional=False,
             input_dropout_p=0, dropout_p=0, use_attention=False, attention_method=None, full_focus=False):
         super(DecoderRNN, self).__init__(vocab_size, max_len, hidden_size,
@@ -124,6 +124,8 @@ class DecoderRNN(BaseRNN):
             elif isinstance(self.rnn, nn.GRU):
                 self.hidden0 = nn.Parameter(torch.zeros([self.n_layers, 1, self.hidden_size]))
 
+        self.attn_vals = attn_vals
+
     def forward_step(self, input_var, hidden, encoder_outputs, function, **attention_method_kwargs):
         """
         Performs one or multiple forward decoder steps.
@@ -171,7 +173,7 @@ class DecoderRNN(BaseRNN):
         return predicted_softmax, hidden, attn
 
     def forward(self, inputs=None, encoder_hidden=None, encoder_outputs=None,
-                    function=F.log_softmax, teacher_forcing_ratio=0, provided_attention=None, provided_attention_vectors=None):
+                    function=F.log_softmax, teacher_forcing_ratio=0, provided_attention=None, provided_attention_vectors=None, possible_attn_vals=None):
         # If the understander is trained using supervised learning, we need a different attention method. One that accepts full attention
         # vectors instead of single indices. As soon as we see that the understander has provided these full vectors, we change the attention method
         # Must be solved more nicely in the future.
@@ -223,8 +225,10 @@ class DecoderRNN(BaseRNN):
         attention_method_kwargs = {}
         if self.attention and isinstance(self.attention.method, HardGuidance):
             attention_method_kwargs['provided_attention'] = provided_attention
+            attention_method_kwargs['attn_vals'] = possible_attn_vals[self.attn_vals]
         if self.attention and isinstance(self.attention.method, ProvidedAttentionVectors):
             attention_method_kwargs['provided_attention_vectors'] = provided_attention_vectors
+            attention_method_kwargs['attn_vals'] = possible_attn_vals[self.attn_vals]
 
         # When we use pre-rnn attention we must unroll the decoder. We need to calculate the attention based on
         # the previous hidden state, before we can calculate the next hidden state.

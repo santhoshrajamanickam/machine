@@ -61,9 +61,10 @@ class EncoderRNN(BaseRNN):
         """
         embedded = self.embedding(input_var)
         embedded = self.input_dropout(embedded)
+        padded_embeddings = embedded
         if self.variable_lengths:
             embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=True)
         output, hidden = self.rnn(embedded)
         if self.variable_lengths:
             output, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
-        return output, hidden
+        return padded_embeddings, hidden, output

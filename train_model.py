@@ -74,6 +74,8 @@ parser.add_argument('--initial_temperature', type=float, default=1, help='(Initi
 parser.add_argument('--learn_temperature', type=str, choices=['no', 'unconditioned', 'conditioned'], help='Whether the temperature should be a learnable parameter. And whether it should be conditioned')
 parser.add_argument('--init_exec_dec_with', type=str, choices=['encoder', 'new'], help='The decoder of the executor can be initialized either with its last encoder state, or with a new (learnable) vector')
 parser.add_argument('--train_regime', type=str, choices=['two-stage', 'simultaneous'], help="In 'two-stage' training we first train the executor with hard guidance for n/2 epochs and then the understander for n/2 epochs. In 'simultaneous' training, we train both models together without any supervision on the attention.")
+parser.add_argument('--attn_keys', type=str, choices=['understander_encoder_embeddings', 'understander_encoder_outputs', 'executor_encoder_embeddings', 'executor_encoder_outputs'])
+parser.add_argument('--attn_vals', type=str, choices=['understander_encoder_embeddings', 'understander_encoder_outputs', 'executor_encoder_embeddings', 'executor_encoder_outputs'])
 
 opt = parser.parse_args()
 IGNORE_INDEX=-1
@@ -201,7 +203,8 @@ else:
                          rnn_cell=opt.rnn_cell,
                          eos_id=tgt.eos_id,
                          sos_id=tgt.sos_id,
-                         init_exec_dec_with=opt.init_exec_dec_with)
+                         init_exec_dec_with=opt.init_exec_dec_with,
+                         attn_vals=opt.attn_vals)
     seq2seq = Seq2seq(encoder, decoder)
     if torch.cuda.is_available():
         seq2seq.cuda()
@@ -228,7 +231,8 @@ understander_model = Understander(
     sample_train=opt.sample_train,
     sample_infer=opt.sample_infer,
     initial_temperature=opt.initial_temperature,
-    learn_temperature=opt.learn_temperature)
+    learn_temperature=opt.learn_temperature,
+    attn_keys=opt.attn_keys)
 if torch.cuda.is_available():
   understander_model.cuda()
 

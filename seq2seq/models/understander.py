@@ -22,7 +22,7 @@ class Understander(nn.Module):
     Finally, call `finish_episod()` to calculate the discounted rewards and policy loss.
     """
 
-    def __init__(self, rnn_cell, input_vocab_size, embedding_dim, hidden_dim, gamma, train_method, sample_train, sample_infer, initial_temperature, learn_temperature):
+    def __init__(self, rnn_cell, input_vocab_size, embedding_dim, hidden_dim, gamma, train_method, sample_train, sample_infer, initial_temperature, learn_temperature, attn_keys):
         """
         Args:
             input_vocab_size (int): Total size of the input vocabulary
@@ -67,8 +67,11 @@ class Understander(nn.Module):
             inverse_max_temperature = 1. / max_temperature
             self.inverse_temperature_estimator = nn.Linear(hidden_dim,1)
             self.inverse_temperature_activation = lambda inv_temp: torch.log(1 + torch.exp(inv_temp)) + inverse_max_temperature
+        self.current_temperature = None
 
-    def forward(self, state, valid_action_mask, max_decoding_length):
+        self.attn_keys = attn_keys
+
+    def forward(self, state, valid_action_mask, max_decoding_length, possible_attn_keys):
         """
         Perform a forward pass through the seq2seq model
 
@@ -80,9 +83,17 @@ class Understander(nn.Module):
         Returns:
             torch.tensor: [batch_size x max_output_length x max_input_length] tensor containing the probabilities for each decoder step to attend to each encoder step
         """
-        encoder_outputs, encoded_hidden = self.encoder(input_variable=state)
+        encoder_embeddings, encoded_hidden, encoder_outputs = self.encoder(input_variable=state)
+
+        # Create dict with both understander and executor's encoder embeddings and outputs
+        possible_attn_keys['understander_encoder_embeddings'] = encoder_embeddings
+        possible_attn_keys['understander_encoder_outputs'] = encoder_outputs
+
+        # Pick the correct attention keys
+        attn_keys = possible_attn_keys[self.attn_keys]
+
         action_probs, decoder_states = self.decoder(encoder_outputs=encoder_outputs, hidden=encoded_hidden,
-                                    output_length=max_decoding_length, valid_action_mask=valid_action_mask)
+                                    output_length=max_decoding_length, valid_action_mask=valid_action_mask, attn_keys=attn_keys)
 
         if  (self.training and self.sample_train == 'gumbel') or \
             (not self.training and self.sample_infer == 'gumbel'):
@@ -102,7 +113,7 @@ class Understander(nn.Module):
                 inverse_temperature = self.inverse_temperature_activation(self.inverse_temperature_estimator(estimator_input))
                 self.current_temperature = 1. / inverse_temperature
 
-        return action_probs
+        return action_probs, possible_attn_keys
 
     def get_valid_action_mask(self, state, input_lengths):
         """
@@ -136,7 +147,7 @@ class Understander(nn.Module):
 
         return valid_action_mask
 
-    def select_actions(self, state, input_lengths, max_decoding_length, epsilon):
+    def select_actions(self, state, input_lengths, max_decoding_length, epsilon, possible_attn_keys):
         """
         Perform forward pass and stochastically select actions using epsilon-greedy RL
 
@@ -157,7 +168,7 @@ class Understander(nn.Module):
         
         # We perform a forward pass to get the probability of attending to each
         # encoder for each decoder
-        probabilities = self.forward(state, valid_action_mask, max_decoding_length)
+        probabilities, possible_attn_keys = self.forward(state, valid_action_mask, max_decoding_length, possible_attn_keys)
 
         # In RL settings, we want to stochastically choose a single action.
         if self.train_method == 'rl':
@@ -238,7 +249,7 @@ class Understander(nn.Module):
             # In supervised setting we have as actions the entire attention vector(s)
             actions = attn
 
-        return actions
+        return actions, possible_attn_keys
 
     def set_rewards(self, rewards):
         self._rewards = rewards
@@ -368,7 +379,7 @@ class UnderstanderEncoder(nn.Module):
 
         out, hidden = self.encoder(input_embedding, hidden0)
 
-        return out, hidden
+        return input_embedding, hidden, out
 
 
 class UnderstanderDecoder(nn.Module):
@@ -413,7 +424,7 @@ class UnderstanderDecoder(nn.Module):
         self.output_layer = nn.Linear(hidden_dim, 1)
         self.output_activation = nn.Softmax(dim=2)
 
-    def forward(self, encoder_outputs, hidden, output_length, valid_action_mask):
+    def forward(self, encoder_outputs, hidden, output_length, valid_action_mask, attn_keys):
         """
         Forward propagation
 
@@ -445,7 +456,7 @@ class UnderstanderDecoder(nn.Module):
             _, decoder_hidden = self.decoder(embedding, decoder_hidden)
 
             # We use the same MLP method as in attention.py
-            encoder_states = encoder_outputs
+            encoder_states = attn_keys
             if self.rnn_cell == 'lstm':
                 h, c = decoder_hidden # Unpack LSTM state
             elif self.rnn_cell == 'gru':

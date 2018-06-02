@@ -63,6 +63,9 @@ class Attention(nn.Module):
         decoder_states_size = decoder_states.size(2)
         input_size = encoder_states.size(1)
 
+        # Get attention values. and remove it from the dictionary
+        attn_vals = attention_method_kwargs.pop('attn_vals')
+
         # compute mask
         mask = encoder_states.eq(0.)[:, :, :1].transpose(1, 2)
 
@@ -83,7 +86,7 @@ class Attention(nn.Module):
             attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
 
         # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
-        context = torch.bmm(attn, encoder_states)
+        context = torch.bmm(attn, attn_vals)
 
         return context, attn
 
