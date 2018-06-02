@@ -73,10 +73,16 @@ class Attention(nn.Module):
         attn = self.method(decoder_states, encoder_states, **attention_method_kwargs).clone()
 
         if self.mask is not None:
-            attn.masked_fill_(self.mask, -float('inf'))
+            if self.apply_softmax:
+                attn.masked_fill_(self.mask, -float('inf'))
+            else:
+                attn.masked_fill_(mask, 0.)
 
         # apply local mask
-        attn.masked_fill_(mask, -float('inf'))
+        if self.apply_softmax:
+            attn.masked_fill_(mask, -float('inf'))
+        else:
+            attn.masked_fill_(mask, 0.)
 
         # Only when we are in RL training and in pre-training mode:
         # we are provided indices and using the Hard attention method.
@@ -84,6 +90,9 @@ class Attention(nn.Module):
         # (possibly) one-hot, and don't need to apply softmax.
         if self.apply_softmax:
             attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
+
+        # TODO: Should be true, but currently not the case as gumbel-softmax does not take into account padded encoder outputs/embeddings, which might be set to 0 above
+        assert torch.sum(attn) == attn.size(0) * attn.size(1), "Sum: {}, Number of attention vectors: {}".format(torch.sum(attn), attn.size(0) * attn.size(1))
 
         # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
         context = torch.bmm(attn, attn_vals)
