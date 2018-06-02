@@ -40,9 +40,17 @@ class Understander(nn.Module):
             embedding_dim=embedding_dim,
             hidden_dim=hidden_dim)
 
+        # The attention scores are calculated from a concatenation of the decoder hidden state and the keys.
+        # So we must pass the dimensions of the keys to the decoder
+        if 'embeddings' in attn_keys:
+            key_dim = embedding_dim
+        elif 'outputs' in attn_keys:
+            key_dim = hidden_dim
+
         self.decoder = UnderstanderDecoder(
             rnn_cell=rnn_cell,
-            hidden_dim=hidden_dim)
+            hidden_dim=hidden_dim,
+            key_dim=key_dim)
 
         self.gamma = gamma
 
@@ -90,7 +98,7 @@ class Understander(nn.Module):
         possible_attn_keys['understander_encoder_outputs'] = encoder_outputs
 
         # Pick the correct attention keys
-        attn_keys = possible_attn_keys[self.attn_keys]
+        attn_keys = possible_attn_keys[self.attn_keys] 
 
         action_probs, decoder_states = self.decoder(encoder_outputs=encoder_outputs, hidden=encoded_hidden,
                                     output_length=max_decoding_length, valid_action_mask=valid_action_mask, attn_keys=attn_keys)
@@ -391,7 +399,7 @@ class UnderstanderDecoder(nn.Module):
     with <pad> inputs are not taken into account for calculations.
     """
 
-    def __init__(self, rnn_cell, hidden_dim):
+    def __init__(self, rnn_cell, hidden_dim, key_dim):
         """      
         Args:
             hidden_dim (int): Size of the RNN cells
@@ -416,8 +424,8 @@ class UnderstanderDecoder(nn.Module):
 
         self.decoder = rnn_cell(1, hidden_dim, batch_first=True)
 
-        # Hidden layer of the MLP. Goes from 2xhidden_dim (enc_state+dec_state) to hidden dim
-        self.hidden_layer = nn.Linear(hidden_dim * 2, hidden_dim)
+        # Hidden layer of the MLP. Goes from dec_state_dim + key_dim to hidden dim
+        self.hidden_layer = nn.Linear(hidden_dim + key_dim, hidden_dim)
         self.hidden_activation = nn.ReLU()
 
         # Final layer that produces the probabilities
@@ -470,24 +478,24 @@ class UnderstanderDecoder(nn.Module):
             # apply mlp to all encoder states for current decoder
             # decoder_states --> (batch, dec_seqlen, hl_size)
             # encoder_states --> (batch, enc_seqlen, hl_size)
-            batch_size, enc_seqlen, hl_size = encoder_states.size()
-            _,          dec_seqlen, _       = decoder_states.size()
+            batch_size, enc_seqlen, hl_size_enc = encoder_states.size()
+            _,          dec_seqlen, hl_size_dec       = decoder_states.size()
 
             # For the encoder states we add extra dimension with dec_seqlen
             # (batch, enc_seqlen, hl_size) -> (batch, dec_seqlen, enc_seqlen, hl_size)
             encoder_states_exp = encoder_states.unsqueeze(1)
-            encoder_states_exp = encoder_states_exp.expand(batch_size, dec_seqlen, enc_seqlen, hl_size)
+            encoder_states_exp = encoder_states_exp.expand(batch_size, dec_seqlen, enc_seqlen, hl_size_enc)
             
             # For the decoder states we add extra dimension with enc_seqlen
             # (batch, dec_seqlen, hl_size) -> (batch, dec_seqlen, enc_seqlen, hl_size)
             decoder_states_exp = decoder_states.unsqueeze(2)
-            decoder_states_exp = decoder_states_exp.expand(batch_size, dec_seqlen, enc_seqlen, hl_size)
+            decoder_states_exp = decoder_states_exp.expand(batch_size, dec_seqlen, enc_seqlen, hl_size_dec)
             
             # reshape encoder and decoder states to allow batchwise computation. We will have
             # in total batch_size x enc_seqlen x dec_seqlen batches. So we apply the Linear
             # layer for each of them
-            decoder_states_tr = decoder_states_exp.contiguous().view(-1, hl_size)
-            encoder_states_tr = encoder_states_exp.contiguous().view(-1, hl_size)
+            decoder_states_tr = decoder_states_exp.contiguous().view(-1, hl_size_dec)
+            encoder_states_tr = encoder_states_exp.contiguous().view(-1, hl_size_enc)
             
             # tensor with two dimensions. The first dimension is the number of batchs which is:
             # batch_size x enc_seqlen x dec_seqlen

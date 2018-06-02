@@ -66,7 +66,7 @@ class DecoderRNN(BaseRNN):
     KEY_SEQUENCE = 'sequence'
 
     def __init__(self, vocab_size, max_len, hidden_size,
-            sos_id, eos_id, init_exec_dec_with, attn_vals,
+            sos_id, eos_id, init_exec_dec_with, attn_vals, embedding_dim,
             n_layers=1, rnn_cell='gru', bidirectional=False,
             input_dropout_p=0, dropout_p=0, use_attention=False, attention_method=None, full_focus=False):
         super(DecoderRNN, self).__init__(vocab_size, max_len, hidden_size,
@@ -84,7 +84,11 @@ class DecoderRNN(BaseRNN):
 
         # increase input size decoder if attention is applied before decoder rnn
         if use_attention == 'pre-rnn' and not full_focus:
-            input_size*=2
+            # Input size is hidden_size + context vector size, which depends on the type of attention value
+            if 'embeddings' in attn_vals:
+                input_size = hidden_size + embedding_dim
+            elif 'outputs' in attn_vals:
+                input_size = hidden_size + hidden_size
 
         self.rnn = self.rnn_cell(input_size, hidden_size, n_layers, batch_first=True, dropout=dropout_p)
 
@@ -106,7 +110,12 @@ class DecoderRNN(BaseRNN):
             self.attention = None
 
         if use_attention == 'post-rnn':
-            self.out = nn.Linear(2*self.hidden_size, self.output_size)
+            # Input size is hidden_size + context vector size, which depends on the type of attention value
+            if 'embeddings' in attn_vals:
+                out_size = hidden_size + embedding_dim
+            elif 'outputs' in attn_vals:
+                out_size = hidden_size + hidden_size
+            self.out = nn.Linear(out_size, self.output_size)
         else:
             self.out = nn.Linear(self.hidden_size, self.output_size)
             if self.full_focus:

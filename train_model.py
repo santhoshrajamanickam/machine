@@ -204,7 +204,8 @@ else:
                          eos_id=tgt.eos_id,
                          sos_id=tgt.sos_id,
                          init_exec_dec_with=opt.init_exec_dec_with,
-                         attn_vals=opt.attn_vals)
+                         attn_vals=opt.attn_vals,
+                         embedding_dim=opt.embedding_size)
     seq2seq = Seq2seq(encoder, decoder)
     if torch.cuda.is_available():
         seq2seq.cuda()

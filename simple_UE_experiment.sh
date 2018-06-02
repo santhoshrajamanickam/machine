@@ -18,8 +18,8 @@ OUTPUT_DIR=example
 
 MAX_LEN=50
 RNN_CELL='gru'
-EMBEDDING_SIZE=128
-HIDDEN_SIZE=128
+EMBEDDING_SIZE=64
+HIDDEN_SIZE=64
 N_LAYERS=1
 DROPOUT_P_ENCODER=0
 DROPOUT_P_DECODER=0
@@ -47,7 +47,7 @@ TRAIN_REGIME='simultaneous' # In 'two-stage' training we first train the executo
 
 # The understander will compute the attention scores based on a concatenation of the decoder hidden states with the 'keys'
 # The keys can be: 'understander_encoder_embeddings', 'understander_encoder_outputs', 'executor_encoder_embeddings', 'executor_encoder_outputs'
-ATTN_KEYS='understander_encoder_outputs'
+ATTN_KEYS='understander_encoder_embeddings'
 # With the attention scores/probs, the executor will create a context vector as a weightes averages over the 'values'
 # The vals can be: 'understander_encoder_embeddings', 'understander_encoder_outputs', 'executor_encoder_embeddings', 'executor_encoder_outputs'
 ATTN_VALS='understander_encoder_embeddings'
