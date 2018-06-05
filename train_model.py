@@ -21,6 +21,8 @@ from seq2seq.dataset import SourceField, TargetField, AttentionField
 from seq2seq.evaluator import Predictor, Evaluator
 from seq2seq.util.checkpoint import Checkpoint
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 try:
     raw_input          # Python 2
 except NameError:
@@ -207,8 +209,7 @@ else:
                          attn_vals=opt.attn_vals,
                          embedding_dim=opt.embedding_size)
     seq2seq = Seq2seq(encoder, decoder)
-    if torch.cuda.is_available():
-        seq2seq.cuda()
+    seq2seq.to(device)
 
     for param in seq2seq.named_parameters():
         # Don't reinitialize the gumbel temperature
@@ -251,9 +252,8 @@ if opt.use_attention_loss:
     losses.append(AttentionLoss(ignore_index=IGNORE_INDEX))
     loss_weights.append(opt.scale_attention_loss)
 
-if torch.cuda.is_available():
-    for loss in losses:
-        loss.cuda()
+for loss in losses:
+  loss.to(device)
 
 metrics = [WordAccuracy(ignore_index=pad), SequenceAccuracy(ignore_index=pad), FinalTargetAccuracy(ignore_index=pad, eos_id=tgt.eos_id)]
 # Since we need the actual tokens to determine k-grammar accuracy,
