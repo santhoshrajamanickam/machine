@@ -302,11 +302,11 @@ class DecoderRNN(BaseRNN):
             if isinstance(self.hidden0, tuple):
                 batch_size = encoder_hidden[0].size(1)
                 encoder_hidden = (
-                    self.hidden0[0].expand(-1, batch_size, -1),
-                    self.hidden0[1].expand(-1, batch_size, -1))
+                    self.hidden0[0].repeat(1, batch_size, 1),
+                    self.hidden0[1].repeat(1, batch_size, 1))
             else:
                 batch_size = encoder_hidden.size(1)
-                encoder_hidden = self.hidden0.expand(-1, batch_size, -1)
+                encoder_hidden = self.hidden0.repeat(1, batch_size, 1)
 
         return encoder_hidden
 

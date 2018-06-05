@@ -63,10 +63,10 @@ class Understander(nn.Module):
 
         self.learn_temperature = learn_temperature
         if learn_temperature == 'no':
-            self.temperature = torch.tensor(initial_temperature, requires_grad=False)
+            self.temperature = torch.tensor(initial_temperature, requires_grad=False, device=device)
 
         elif learn_temperature == 'unconditioned':
-            self.temperature = nn.Parameter(torch.log(torch.tensor(initial_temperature)), requires_grad=True)
+            self.temperature = nn.Parameter(torch.log(torch.tensor(initial_temperature, device=device)), requires_grad=True)
             self.temperature_activation = torch.exp
 
         elif learn_temperature == 'conditioned':
@@ -379,12 +379,12 @@ class UnderstanderEncoder(nn.Module):
         # Expand learned initial states to the batch size
         batch_size = input_embedding.size(0)
         if self.rnn_cell == 'lstm':
-            h_0_batch = self.h_0.expand(self.n_layers, batch_size, self.hidden_dim)
-            c_0_batch = self.c_0.expand(self.n_layers, batch_size, self.hidden_dim)
+            h_0_batch = self.h_0.repeat(1, batch_size, 1)
+            c_0_batch = self.c_0.repeat(1, batch_size, 1)
             hidden0 = (h_0_batch, c_0_batch)
 
         elif self.rnn_cell == 'gru':
-            h_0_batch = self.h_0.expand(self.n_layers, batch_size, self.hidden_dim)
+            h_0_batch = self.h_0.repeat(1, batch_size, 1)
             hidden0 = h_0_batch
 
         out, hidden = self.encoder(input_embedding, hidden0)
