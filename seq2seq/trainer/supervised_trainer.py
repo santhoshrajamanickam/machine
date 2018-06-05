@@ -256,7 +256,7 @@ class SupervisedTrainer(object):
 
         for epoch in range(start_epoch, n_epochs + 1):
             if understander_model.current_temperature is not None:
-                log.info("Temperature: {}".format(understander_model.current_temperature.data[0].item()))
+                log.info("Example temperature: {}".format(understander_model.current_temperature[0].item()))
 
             log.info("Epoch: %d, Step: %d" % (epoch, step))
 

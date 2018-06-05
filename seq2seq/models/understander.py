@@ -232,7 +232,7 @@ class Understander(nn.Module):
             # We are in training mode
             if self.training:
                 if self.sample_train == 'full':
-                    attn = F.softmax(attn.view(-1, n_encoder_states), dim=1).view(batch_size, -1, n_encoder_states)
+                    attn = attn
 
                 elif self.sample_train == 'gumbel':
                     invalid_action_mask = valid_action_mask.eq(0).unsqueeze(1).expand(batch_size, n_decoder_states, n_encoder_states).contiguous().view(-1, n_encoder_states)
@@ -243,7 +243,7 @@ class Understander(nn.Module):
             # Inference mode
             else:
                 if self.sample_infer == 'full':
-                    attn = F.softmax(attn.view(-1, n_encoder_states), dim=1).view(batch_size, -1, n_encoder_states)
+                    attn = attn
 
                 elif self.sample_infer == 'gumbel':
                     invalid_action_mask = valid_action_mask.eq(0).unsqueeze(1).expand(batch_size, n_decoder_states, n_encoder_states).contiguous().view(-1, n_encoder_states)

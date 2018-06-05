@@ -33,21 +33,21 @@ PRINT_EVERY=99999999999999
 ATTENTION='pre-rnn'
 ATTTENTION_METHOD='hard'
 
-EPOCHS=200 # first 50% of epochs, only the executor is trained with hard guidance. Second half, the understander is trained
+EPOCHS=2000 # first 50% of epochs, only the executor is trained with hard guidance. Second half, the understander is trained
 GAMMA=0.1 # Discount factor for rewards. Since we don't have sparse rewards, we can keep this low
 EPSILON=0.99 # Sample stochastically from policy 99% of times, sample unifomly 1%
 TRAIN_METHOD='supervised' # Train understander with either 'supervised' or 'rl'
 SAMPLE_TRAIN='gumbel' # In supervised setting we can either use the 'full' attention vector, or sample using 'gumbel'
-SAMPLE_INFER='argmax' # In supervised setting we can either use the 'full' attention vector, sample using 'gumbel' or use 'argmax' ar inference
-INIT_TEMP=5 # (Initial) temperature for gumbel-softmax
-LEARN_TEMP='conditioned' # Fix temperature with 'no', make it a latent, unconditioned, learnable parameter with 'unconditioned', learn it conditioned on encoder-decoder concatenation with 'conditioned'
+SAMPLE_INFER='gumbel' # In supervised setting we can either use the 'full' attention vector, sample using 'gumbel' or use 'argmax' ar inference
+INIT_TEMP=1 # (Initial) temperature for gumbel-softmax
+LEARN_TEMP='no' # Fix temperature with 'no', make it a latent, unconditioned, learnable parameter with 'unconditioned', learn it conditioned on encoder-decoder concatenation with 'conditioned'
 INIT_EXEC_DEC_WITH='new' # Initialize the executor's decoder with it's last encoder, or with a new learable vector
 TRAIN_REGIME='simultaneous' # In 'two-stage' training we first train the executor with hard guidance for n/2 epochs and then the understander for n/2 epochs
                             # In 'simultaneous' training, we train both models together without any supervision on the attention.
 
 # The understander will compute the attention scores based on a concatenation of the decoder hidden states with the 'keys'
 # The keys can be: 'understander_encoder_embeddings', 'understander_encoder_outputs', 'executor_encoder_embeddings', 'executor_encoder_outputs'
-ATTN_KEYS='understander_encoder_embeddings'
+ATTN_KEYS='understander_encoder_outputs'
 # With the attention scores/probs, the executor will create a context vector as a weightes averages over the 'values'
 # The vals can be: 'understander_encoder_embeddings', 'understander_encoder_outputs', 'executor_encoder_embeddings', 'executor_encoder_outputs'
 ATTN_VALS='understander_encoder_embeddings'
