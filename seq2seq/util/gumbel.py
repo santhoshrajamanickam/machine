@@ -13,7 +13,7 @@ def _sample_gumbel(shape, eps, out=None):
     return - torch.log(eps - torch.log(U + eps))
 
 
-def _gumbel_softmax_sample(logits, tau, eps):
+def _gumbel_softmax_sample(logits, invalid_action_mask, tau, eps):
     """
     Draw a sample from the Gumbel-Softmax distribution
 
@@ -24,11 +24,13 @@ def _gumbel_softmax_sample(logits, tau, eps):
     dims = logits.dim()
     gumbel_noise = _sample_gumbel(logits.size(), eps=eps, out=logits.data.new())
     y = logits + gumbel_noise
+    temperature_normalized_gumbel_probs = y / tau
+    temperature_normalized_gumbel_probs.masked_fill_(mask=invalid_action_mask, value=-float('inf'))
 
-    return softmax(y / tau, dims - 1)
+    return softmax(temperature_normalized_gumbel_probs, dims - 1)
 
 
-def gumbel_softmax(logits, tau, hard, eps):
+def gumbel_softmax(logits, invalid_action_mask, tau, hard, eps):
     """
     Sample from the Gumbel-Softmax distribution and optionally discretize.
     Args:
@@ -49,7 +51,7 @@ def gumbel_softmax(logits, tau, hard, eps):
     """
     shape = logits.size()
     assert len(shape) == 2
-    y_soft = _gumbel_softmax_sample(logits, tau=tau, eps=eps)
+    y_soft = _gumbel_softmax_sample(logits, invalid_action_mask, tau=tau, eps=eps)
     if hard:
         _, k = y_soft.data.max(-1)
         # this bit is based on
