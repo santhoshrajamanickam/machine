@@ -69,6 +69,9 @@ seq2seq = checkpoint.model
 input_vocab = checkpoint.input_vocab
 output_vocab = checkpoint.output_vocab
 
+if opt.attention_method == "hard" and seq2seq.decoder.attention_method != "hard":
+    seq2seq.decoder.attention = Attention(seq2seq.decoder.hidden_size, opt.attention_method)
+
 ############################################################################
 # Prepare dataset and loss
 src = SourceField()
