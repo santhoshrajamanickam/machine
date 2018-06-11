@@ -6,6 +6,7 @@ import torch
 import torchtext
 
 import seq2seq
+from seq2seq.models.attention import Attention
 from seq2seq.loss import Perplexity, AttentionLoss, NLLLoss
 from seq2seq.metrics import WordAccuracy, SequenceAccuracy, FinalTargetAccuracy, SymbolRewritingAccuracy
 from seq2seq.dataset import SourceField, TargetField, AttentionField
