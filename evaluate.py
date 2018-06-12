@@ -150,7 +150,7 @@ evaluator = Evaluator(batch_size=opt.batch_size, loss=losses, metrics=metrics)
 print(output_vocab.itos)
 if opt.output:
     losses, metrics, probs = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output)
-    with open("{}_output.tsv".format(opt.test_data.split('\\')[-1].split(".")[0]), 'w') as f:
+    with open("{}_output.tsv".format(opt.test_data.split('/')[-1].split(".")[0]), 'w') as f:
         f.write("\n".join(probs))
 else:
     losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output)    
