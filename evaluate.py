@@ -34,6 +34,7 @@ parser.add_argument('--log-level', default='info', help='Logging level.')
 parser.add_argument('--attention', choices=['pre-rnn', 'post-rnn'], default=False)
 parser.add_argument('--attention_method', choices=['dot', 'mlp', 'hard'], default=None)
 parser.add_argument('--use_attention_loss', action='store_true')
+parser.add_argument('--output', action='store_true')
 parser.add_argument('--scale_attention_loss', type=float, default=1.)
 
 parser.add_argument('--ignore_output_eos', action='store_true', help='Ignore end of sequence token during training and evaluation')
@@ -68,7 +69,10 @@ logging.info("loading checkpoint from {}".format(os.path.join(opt.checkpoint_pat
 checkpoint = Checkpoint.load(opt.checkpoint_path)
 seq2seq = checkpoint.model
 input_vocab = checkpoint.input_vocab
+
 output_vocab = checkpoint.output_vocab
+print(output_vocab.stoi)
+print(seq2seq.decoder.attention.method)
 
 if opt.attention_method == "hard" and seq2seq.decoder.attention_method != "hard":
     seq2seq.decoder.attention = Attention(seq2seq.decoder.hidden_size, opt.attention_method)
@@ -142,7 +146,14 @@ data_func = SupervisedTrainer.get_batch_data
 # Evaluate model on test set
 
 evaluator = Evaluator(batch_size=opt.batch_size, loss=losses, metrics=metrics)
-losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func)
+
+print(output_vocab.itos)
+if opt.output:
+    losses, metrics, probs = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output)
+    with open("{}_output.tsv".format(opt.test_data.split('\\')[-1].split(".")[0]), 'w') as f:
+        f.write("\n".join(probs))
+else:
+    losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output)    
 
 total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
 
