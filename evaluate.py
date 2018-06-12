@@ -35,6 +35,7 @@ parser.add_argument('--attention', choices=['pre-rnn', 'post-rnn'], default=Fals
 parser.add_argument('--attention_method', choices=['dot', 'mlp', 'hard'], default=None)
 parser.add_argument('--use_attention_loss', action='store_true')
 parser.add_argument('--output', action='store_true')
+parser.add_argument('--output_dir')
 parser.add_argument('--scale_attention_loss', type=float, default=1.)
 
 parser.add_argument('--ignore_output_eos', action='store_true', help='Ignore end of sequence token during training and evaluation')
@@ -150,7 +151,8 @@ evaluator = Evaluator(batch_size=opt.batch_size, loss=losses, metrics=metrics)
 print(output_vocab.itos)
 if opt.output:
     losses, metrics, probs = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output)
-    with open("{}_output.tsv".format(opt.test_data.split('/')[-1].split(".")[0]), 'w') as f:
+    filename = "{}_output.tsv".format(opt.test_data.split('/')[-1].split(".")[0])
+    with open(os.path.join(opt.output_dir, filename), 'w') as f:
         f.write("\n".join(probs))
 else:
     losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output)    
