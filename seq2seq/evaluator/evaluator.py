@@ -4,8 +4,10 @@ import torch
 import torchtext
 
 import seq2seq
+import operator
 from seq2seq.loss import NLLLoss
 from seq2seq.metrics import WordAccuracy, SequenceAccuracy
+from pprint import pprint
 
 class Evaluator(object):
     """ Class to evaluate models with given datasets.
@@ -82,7 +84,7 @@ class Evaluator(object):
 
         return losses
 
-    def evaluate(self, model, data, get_batch_data):
+    def evaluate(self, model, data, get_batch_data, vocab, output):
         """ Evaluate a model on given dataset and return performance.
 
         Args:
@@ -95,6 +97,7 @@ class Evaluator(object):
         """
         # If the model was in train mode before this method was called, we make sure it still is
         # after this method.
+        print(vocab)
         previous_train_mode = model.training
         model.eval()
 
@@ -113,19 +116,35 @@ class Evaluator(object):
             sort=True, sort_key=lambda x: len(x.src),
             device=iterator_device, train=False)
 
+        if output: all_prob_steps = []
+
         # loop over batches
         with torch.no_grad():
             for batch in batch_iterator:
                 input_variable, input_lengths, target_variable = get_batch_data(batch)
 
-                decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable)
+                if output:
+                    model.decode_function = torch.nn.functional.softmax
+                    decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable)
+                    prob_steps = []
+                    for probs in decoder_outputs:
+                        probs = list(zip(vocab.itos, probs.numpy()[0]))[3:]
+                        probs = list(reversed(sorted(probs, key=lambda x: x[1])))[:3]
+                        probs = " ".join(["{}-{:0.4f}".format(w, v) for w, v in probs])
+                        prob_steps.append(probs)
+                    prob_steps = "\t".join(prob_steps)
+                    model.decode_function = torch.nn.functional.log_softmax
+                    all_prob_steps.append(prob_steps)
 
+                decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable)
                 # Compute metric(s) over one batch
                 metrics = self.update_batch_metrics(metrics, other, target_variable)
-                
+
                 # Compute loss(es) over one batch
                 losses = self.update_loss(losses, decoder_outputs, decoder_hidden, other, target_variable)
 
         model.train(previous_train_mode)
 
-        return losses, metrics
+        if output: return losses, metrics, all_prob_steps
+        else: return losses, metrics
+
