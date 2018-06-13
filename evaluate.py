@@ -30,20 +30,22 @@ parser.add_argument('--cuda_device', default=0, type=int, help='set cuda device 
 parser.add_argument('--max_len', type=int, help='Maximum sequence length', default=50)
 parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
 parser.add_argument('--log-level', default='info', help='Logging level.')
-
+parser.add_argument('--log_file', default="")
 parser.add_argument('--attention', choices=['pre-rnn', 'post-rnn'], default=False)
 parser.add_argument('--attention_method', choices=['dot', 'mlp', 'hard'], default=None)
 parser.add_argument('--use_attention_loss', action='store_true')
 parser.add_argument('--output', action='store_true')
 parser.add_argument('--output_dir')
 parser.add_argument('--scale_attention_loss', type=float, default=1.)
-
 parser.add_argument('--ignore_output_eos', action='store_true', help='Ignore end of sequence token during training and evaluation')
 
 opt = parser.parse_args()
 
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
-logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
+if not opt.log_file:
+    logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
+else:
+    logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()), filename=opt.log_file)
 logging.info(opt)
 
 IGNORE_INDEX=-1
