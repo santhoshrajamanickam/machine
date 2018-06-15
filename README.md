@@ -42,6 +42,15 @@ The scripts `infer.py` and `evaluate.py` can be used to run an existing model (l
       # Evaluate a trained model stored in $checkpoint_path
     ` python evaluate.py --checkpoint_path $checkpoint_path --test_data $test_data
 
+## Attention Types
+
+The attention types available on this branch are the following:
+* dot (standard)
+* mlp (standard)
+* hard (if flagged at evaluation time, the attention method of the model will be changed to hard guidance)
+* diffused (this is the diffused variant of the hard guidance, set a `--level` argument with a number between 0 and 1, if -1 uniform attention is used)
+* baseline (this transfers attention from a baseline model to the model you are evaluating, set `--baseline_checkpoint_path` to use this attention)
+
 ## Example script
 
 The script `example.sh` illustrates the usage of all three tools: it uses the toy data from the test directory (containing a 'reverse' dataset in which the translation of any sequence of numbers is its inverse), trains a model on this data using `train_model.py`, evaluates this model using `evaluate.py` and then runs `infer.py` to generate outputs.
