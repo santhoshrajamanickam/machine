@@ -40,10 +40,11 @@ class Attention(nn.Module):
 
     """
 
-    def __init__(self, dim, method):
+    def __init__(self, dim, method, level=0):
         super(Attention, self).__init__()
         self.mask = None
-        self.method = self.get_method(method, dim)
+        self.method = self.get_method(method, dim, level)
+        self.last_attention = []
 
     def set_mask(self, mask):
         """
@@ -66,20 +67,28 @@ class Attention(nn.Module):
         # Compute attention vals
         attn = self.method(decoder_states, encoder_states, **attention_method_kwargs)
 
-        if self.mask is not None:
-            attn.masked_fill_(self.mask, -float('inf'))
+        # Preparation only needed if the attention doesn't come from the baseline
+        if not isinstance(self.method, BaselineGuidance):
+            if self.mask is not None:
+                attn.masked_fill_(self.mask, -float('inf'))
 
-        # apply local mask
-        attn.masked_fill_(mask, -float('inf'))
+            # apply local mask
+            attn.masked_fill_(mask, -float('inf'))
 
-        attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
+            attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
+
+        # Diffuse attention after softmax is applied
+        if isinstance(self.method, DiffusedGuidance):
+            attn = self.method.diffuse(attn)
+
+        self.last_attention.append(attn)
 
         # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
         context = torch.bmm(attn, encoder_states)
 
         return context, attn
 
-    def get_method(self, method, dim):
+    def get_method(self, method, dim, level=0):
         """
         Set method to compute attention
         """
@@ -91,10 +100,17 @@ class Attention(nn.Module):
             method = Dot()
         elif method == 'hard':
             method = HardGuidance()
+        elif method == 'diffused':
+            method = DiffusedGuidance(level)
+        elif method == "baseline":
+            method = BaselineGuidance()
         else:
             raise ValueError("Unknown attention method")
 
         return method
+
+    def clean_memory(self):
+        self.last_attention = []
 
 
 class Concat(nn.Module):
@@ -231,5 +247,46 @@ class HardGuidance(nn.Module):
         attention_scores = torch.full([batch_size, dec_seqlen, enc_seqlen], fill_value=-float('inf'), device=device)
         attention_scores = attention_scores.scatter_(dim=2, index=attention_indices, value=1)
         attention_scores = attention_scores
-
+ 
         return attention_scores
+
+
+class DiffusedGuidance(nn.Module):
+    """
+    Attention method that takes hard guidance from a data set and
+    diffuses it according to a level indicated.
+    0 means no diffusion
+    1 means the original attention position gets no attention at all
+    -1 means uniform
+    """
+    def __init__(self, level):
+        super(DiffusedGuidance, self).__init__()
+        self.level = level
+        self.method = HardGuidance()
+
+    def forward(self, decoder_states, encoder_states, step, provided_attention):
+        # Get the attention as calculated by the hard guidance model
+        return self.method(decoder_states, encoder_states, step, provided_attention)
+
+    def diffuse(self, attention):
+        for i in range(attention.shape[2]-1):
+            # Uniform attention
+            if self.level == -1:
+                attention[0][0][i] = 1 / (attention.shape[2] - 1)
+            # Diffuse the hard attention
+            else:
+                if attention[0][0][i].item() == 1:
+                    attention[0][0][i] = 1 - self.level
+                else:
+                    attention[0][0][i] = self.level / (attention.shape[2] - 2)
+        return attention
+
+
+class BaselineGuidance(nn.Module):
+    """
+    Attention method that transfers attention of the baseline model to 
+    the model currently used.
+    """
+
+    def forward(self, decoder_states, encoder_states, provided_attention):
+        return provided_attention

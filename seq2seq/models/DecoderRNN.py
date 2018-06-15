@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .attention import Attention, HardGuidance
+from .attention import Attention, HardGuidance, DiffusedGuidance, BaselineGuidance
 from .baseRNN import BaseRNN
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -130,7 +130,8 @@ class DecoderRNN(BaseRNN):
             if isinstance(hidden, tuple):
                 h, c = hidden
             # Apply the attention method to get the attention vector and weighted context vector. Provide decoder step for hard attention
-            context, attn = self.attention(h[-1:].transpose(0,1), encoder_outputs, **attention_method_kwargs) # transpose to get batch at the second index
+            context, attn = self.attention(h[-1:].transpose(0,1), encoder_outputs, **attention_method_kwargs) # transpose to get batch at the second index               
+            
             combined_input = torch.cat((context, embedded), dim=2)
             if self.full_focus:
                 merged_input = F.relu(self.ffocus_merge(combined_input))
@@ -153,7 +154,8 @@ class DecoderRNN(BaseRNN):
 
     def forward(self, inputs=None, encoder_hidden=None, encoder_outputs=None,
                     function=F.log_softmax, teacher_forcing_ratio=0, provided_attention=None):
-
+        if self.attention:
+            self.attention.clean_memory()
         ret_dict = dict()
         if self.use_attention:
             ret_dict[DecoderRNN.KEY_ATTN_SCORE] = list()
@@ -185,7 +187,7 @@ class DecoderRNN(BaseRNN):
 
         # Prepare extra arguments for attention method
         attention_method_kwargs = {}
-        if self.attention and isinstance(self.attention.method, HardGuidance):
+        if self.attention and (isinstance(self.attention.method, HardGuidance) or isinstance(self.attention.method, DiffusedGuidance) or isinstance(self.attention.method, BaselineGuidance)):
             attention_method_kwargs['provided_attention'] = provided_attention
 
         # When we use pre-rnn attention we must unroll the decoder. We need to calculate the attention based on
@@ -209,8 +211,10 @@ class DecoderRNN(BaseRNN):
                     decoder_input = symbols
 
                 # Perform one forward step
-                if self.attention and isinstance(self.attention.method, HardGuidance):
+                if self.attention and (isinstance(self.attention.method, HardGuidance) or isinstance(self.attention.method, DiffusedGuidance)):
                     attention_method_kwargs['step'] = di
+                if self.attention and isinstance(self.attention.method, BaselineGuidance):
+                    attention_method_kwargs['provided_attention'] = provided_attention[di]
                 decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
                                                                          function=function, **attention_method_kwargs)
                 # Remove the unnecessary dimension.
@@ -224,7 +228,7 @@ class DecoderRNN(BaseRNN):
             decoder_input = inputs[:, :-1]
 
             # Forward step without unrolling
-            if self.attention and isinstance(self.attention.method, HardGuidance):
+            if self.attention and (isinstance(self.attention.method, HardGuidance) or isinstance(self.attention.method, DiffusedGuidance) or isinstance(self.attention.method, BaselineGuidance)):
                 attention_method_kwargs['step'] = -1
             decoder_output, decoder_hidden, attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs, function=function, **attention_method_kwargs)
 
@@ -238,7 +242,6 @@ class DecoderRNN(BaseRNN):
 
         ret_dict[DecoderRNN.KEY_SEQUENCE] = sequence_symbols
         ret_dict[DecoderRNN.KEY_LENGTH] = lengths.tolist()
-
         return decoder_outputs, decoder_hidden, ret_dict
 
     def _init_state(self, encoder_hidden):

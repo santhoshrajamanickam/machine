@@ -84,7 +84,7 @@ class Evaluator(object):
 
         return losses
 
-    def evaluate(self, model, data, get_batch_data, vocab, output):
+    def evaluate(self, model, data, get_batch_data, vocab, output, baseline_model=None):
         """ Evaluate a model on given dataset and return performance.
 
         Args:
@@ -97,7 +97,6 @@ class Evaluator(object):
         """
         # If the model was in train mode before this method was called, we make sure it still is
         # after this method.
-        print(vocab)
         previous_train_mode = model.training
         model.eval()
 
@@ -122,21 +121,26 @@ class Evaluator(object):
         with torch.no_grad():
             for batch in batch_iterator:
                 input_variable, input_lengths, target_variable = get_batch_data(batch)
+                if baseline_model is not None:
+                    _ = baseline_model(input_variable, input_lengths.tolist(), target_variable)
+                    predetermined_attention = baseline_model.decoder.attention.last_attention
+                else:
+                    predetermined_attention = None
 
                 if output:
                     model.decode_function = torch.nn.functional.softmax
-                    decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable)
+                    decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable, baseline_provided_attention=predetermined_attention)
                     prob_steps = []
                     for probs in decoder_outputs:
                         probs = list(zip(vocab.itos, probs.numpy()[0]))[3:]
-                        probs = list(reversed(sorted(probs, key=lambda x: x[1])))[:3]
+                        probs = list(reversed(sorted(probs, key=lambda x: x[1])))
                         probs = " ".join(["{}-{:0.4f}".format(w, v) for w, v in probs])
                         prob_steps.append(probs)
                     prob_steps = "\t".join(prob_steps)
                     model.decode_function = torch.nn.functional.log_softmax
                     all_prob_steps.append(prob_steps)
 
-                decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable)
+                decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable, baseline_provided_attention=predetermined_attention)
                 # Compute metric(s) over one batch
                 metrics = self.update_batch_metrics(metrics, other, target_variable)
 
@@ -147,4 +151,3 @@ class Evaluator(object):
 
         if output: return losses, metrics, all_prob_steps
         else: return losses, metrics
-

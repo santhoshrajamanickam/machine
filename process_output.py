@@ -63,7 +63,9 @@ def calculate_certainty_measure(heldout, evaluation_output, only_correct):
             is_correct = iteration_probs.most_common(1)[0][0] == answer
             if not only_correct or (only_correct and is_correct):
                 a += float(iteration_probs[answer])
+                print(float(iteration_probs[answer]))
                 n += 1
+        print("\n")
     a = a / n
     return a
 
@@ -82,9 +84,9 @@ output = load_outputs(opt.output)
 
 # Including all data
 metric = calculate_certainty_measure(heldout, output, False)
-logging.info("All: {}".format(metric))
+print("All: {}".format(metric))
 
-# Only including the data for which the answer was correct
-metric = calculate_certainty_measure(heldout, output, True)
-logging.info("Only the correct ones: {}".format(metric))
+# # Only including the data for which the answer was correct
+# metric = calculate_certainty_measure(heldout, output, True)
+# print("Only the correct ones: {}".format(metric))
 

@@ -25,14 +25,16 @@ except NameError:
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--checkpoint_path', help='Give the checkpoint path from which to load the model')
+parser.add_argument('--baseline_checkpoint_path', help='Give the checkpoint path from which to load the model', default=None)
 parser.add_argument('--test_data', help='Path to test data')
 parser.add_argument('--cuda_device', default=0, type=int, help='set cuda device to use')
 parser.add_argument('--max_len', type=int, help='Maximum sequence length', default=50)
 parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
 parser.add_argument('--log-level', default='info', help='Logging level.')
 parser.add_argument('--log_file', default="")
+parser.add_argument('--level', default=0)
 parser.add_argument('--attention', choices=['pre-rnn', 'post-rnn'], default=False)
-parser.add_argument('--attention_method', choices=['dot', 'mlp', 'hard'], default=None)
+parser.add_argument('--attention_method', choices=['dot', 'mlp', 'hard', 'diffused', 'baseline'], default=None)
 parser.add_argument('--use_attention_loss', action='store_true')
 parser.add_argument('--output', action='store_true')
 parser.add_argument('--output_dir')
@@ -59,7 +61,13 @@ if opt.attention and not opt.attention_method:
     parser.error("Attention turned on, but no attention method provided")
 
 if opt.use_attention_loss and opt.attention_method == 'hard':
-    parser.warning("Did you mean to use attention loss in combination with hard attention method?")
+    parser.error("Did you mean to use attention loss in combination with hard attention method?")
+
+if opt.attention_method == 'diffused' and opt.level == 0:
+    parser.error("Level 0 is selected for diffused attention, which makes it hard guidance.")
+
+if opt.attention_method == "baseline" and opt.baseline_checkpoint_path is None:
+    parser.error("Attention method `baseline' is provided, but there is no baseline checkpoint path.")
 
 if torch.cuda.is_available():
     logging.info("Cuda device set to %i" % opt.cuda_device)
@@ -72,13 +80,21 @@ logging.info("loading checkpoint from {}".format(os.path.join(opt.checkpoint_pat
 checkpoint = Checkpoint.load(opt.checkpoint_path)
 seq2seq = checkpoint.model
 input_vocab = checkpoint.input_vocab
-
 output_vocab = checkpoint.output_vocab
-print(output_vocab.stoi)
-print(seq2seq.decoder.attention.method)
 
-if opt.attention_method == "hard" and seq2seq.decoder.attention_method != "hard":
+if opt.baseline_checkpoint_path is not None:
+    logging.info("loading baseline checkpoint from {}".format(os.path.join(opt.baseline_checkpoint_path)))
+    baseline_checkpoint = Checkpoint.load(opt.baseline_checkpoint_path)
+    baseline_seq2seq = baseline_checkpoint.model
+else:
+    baseline_seq2seq = None
+
+if (opt.attention_method == "hard" and seq2seq.decoder.attention_method != "hard" or \
+    opt.attention_method == "baseline" and seq2seq.decoder.attention_method != "baseline"):
     seq2seq.decoder.attention = Attention(seq2seq.decoder.hidden_size, opt.attention_method)
+
+if opt.attention_method == "diffused" and seq2seq.decoder.attention_method != "diffused":
+    seq2seq.decoder.attention = Attention(seq2seq.decoder.hidden_size, opt.attention_method, float(opt.level))
 
 ############################################################################
 # Prepare dataset and loss
@@ -87,7 +103,7 @@ tgt = TargetField(output_eos_used)
 
 tabular_data_fields = [('src', src), ('tgt', tgt)]
 
-if opt.use_attention_loss or opt.attention_method == 'hard':
+if opt.use_attention_loss or opt.attention_method == 'hard' or opt.attention_method == 'diffused':
   attn = AttentionField(use_vocab=False, ignore_index=IGNORE_INDEX)
   tabular_data_fields.append(('attn', attn))
 
@@ -150,14 +166,13 @@ data_func = SupervisedTrainer.get_batch_data
 
 evaluator = Evaluator(batch_size=opt.batch_size, loss=losses, metrics=metrics)
 
-print(output_vocab.itos)
 if opt.output:
-    losses, metrics, probs = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output)
+    losses, metrics, probs = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output, baseline_model=baseline_seq2seq)
     filename = "{}_output.tsv".format(opt.test_data.split('/')[-1].split(".")[0])
     with open(os.path.join(opt.output_dir, filename), 'w') as f:
         f.write("\n".join(probs))
 else:
-    losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output)    
+    losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output, baseline_model=baseline_seq2seq)    
 
 total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
 
