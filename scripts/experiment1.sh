@@ -15,7 +15,7 @@
 # 7. now run calculate_metrics_experiment1.py
 # Don't be afraid because of all the prints in your terminal, at the end of the python script you will have nice numbers
 
-model=5
+model=1
 level=1
 
 counter=1
