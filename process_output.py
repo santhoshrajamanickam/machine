@@ -63,9 +63,7 @@ def calculate_certainty_measure(heldout, evaluation_output, only_correct):
             is_correct = iteration_probs.most_common(1)[0][0] == answer
             if not only_correct or (only_correct and is_correct):
                 a += float(iteration_probs[answer])
-                print(float(iteration_probs[answer]))
                 n += 1
-        print("\n")
     a = a / n
     return a
 
