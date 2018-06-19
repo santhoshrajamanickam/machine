@@ -148,7 +148,8 @@ if opt.use_attention_loss or opt.attention_method == 'hard':
         tgt_len = len(vars(train[0])['tgt']) - 1 # -1 for SOS
         attn_len = len(vars(train[0])['attn']) - 1 # -1 for preprended ignore_index
         if attn_len != tgt_len:
-            raise Exception("Length of output sequence does not equal length of attention sequence in train data")
+            for index, i in enumerate(train):
+                vars(train[index])['attn'] = vars(train[index])['attn'][:-1]
 
     if dev is not None and len(dev) > 0:
         if 'attn' not in vars(dev[0]):

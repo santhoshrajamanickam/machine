@@ -6,6 +6,7 @@ import torch
 import torchtext
 
 import seq2seq
+from seq2seq.models.attention import Attention
 from seq2seq.loss import Perplexity, AttentionLoss, NLLLoss
 from seq2seq.metrics import WordAccuracy, SequenceAccuracy, FinalTargetAccuracy, SymbolRewritingAccuracy
 from seq2seq.dataset import SourceField, TargetField, AttentionField
@@ -69,6 +70,10 @@ seq2seq = checkpoint.model
 input_vocab = checkpoint.input_vocab
 output_vocab = checkpoint.output_vocab
 
+if (opt.attention_method == "hard" and seq2seq.decoder.attention_method != "hard" or \
+    opt.attention_method == "baseline" and seq2seq.decoder.attention_method != "baseline"):
+    seq2seq.decoder.attention = Attention(seq2seq.decoder.hidden_size, opt.attention_method)
+
 ############################################################################
 # Prepare dataset and loss
 src = SourceField()
@@ -105,7 +110,8 @@ if opt.use_attention_loss or opt.attention_method == 'hard':
         tgt_len = len(vars(test[0])['tgt']) - 1 # -1 for SOS
         attn_len = len(vars(test[0])['attn']) - 1 # -1 for preprended ignore_index
         if attn_len != tgt_len:
-            raise Exception("Length of output sequence does not equal length of attention sequence in test data.")
+            for index, i in enumerate(test):
+                vars(test[index])['attn'] = vars(test[index])['attn'][:-1]
 
 # Prepare loss and metrics
 pad = output_vocab.stoi[tgt.pad_token]
