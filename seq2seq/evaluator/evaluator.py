@@ -84,7 +84,7 @@ class Evaluator(object):
 
         return losses
 
-    def evaluate(self, model, data, get_batch_data, vocab, output, baseline_model=None):
+    def evaluate(self, model, data, get_batch_data, vocab=None, output=None, baseline_model=None):
         """ Evaluate a model on given dataset and return performance.
 
         Args:
