@@ -3,6 +3,7 @@ import subprocess
 import os
 import copy
 import numpy as np
+import argparse
 
 from pprint import pprint
 from collections import defaultdict, Counter
@@ -22,7 +23,7 @@ def extract_accuracies(foldername, subfolder, filename, model, sample):
     subfolder = os.path.join(foldername, subfolder)
     filename = filename.replace("_no_eos", "")
     with open("attacks-evaluation-accuracies/model{}/sample{}/{}.out".format(model, sample+1, filename), 'r') as f:
-        log_file = f.read().split()    
+        log_file = f.read().split()
 
     word_accuracy, sequence_accuracy = None, None
     for i, word in enumerate(log_file):
@@ -33,6 +34,11 @@ def extract_accuracies(foldername, subfolder, filename, model, sample):
             break
 
     return float(word_accuracy), float(sequence_accuracy)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--level', default=1, help='number of swappings', type=int)
+opt = parser.parse_args()
+level = opt.level
 
 model = 1
 probabilities = defaultdict(lambda: defaultdict(list))
@@ -53,7 +59,7 @@ for j in range(1, 6):
     folders = os.listdir(foldername)
     folders.sort()
 
-    # For every sample folder in the data    
+    # For every sample folder in the data
     for i, subfolder in enumerate(folders):
         # Skip sample1, the model was trained on this
         if i == 0:
@@ -95,17 +101,28 @@ for key in word_accuracies:
         maximum[key][subkey] = max(all_values)
         variance[key][subkey] = np.var(all_values)
 
-print("Word Accuracies, Average")
-pprint(word_accuracies)
+word_acc_file = './word_accuracies.txt'
 
-print("Word Accuracies, Maximum")
-pprint(maximum)
+with open(word_acc_file, 'a') as f:
+    f.write("Level " + str(level)+"\n")
+    f.write("Word Accuracies, Average"+"\n")
+    f.write(str(word_accuracies)+"\n")
+    f.write("Word Accuracies, Maximum"+"\n")
+    f.write(str(maximum)+"\n")
+    f.write("Word Accuracies, Minimum"+"\n")
+    f.write(str(minimum)+"\n")
 
-print("Word Accuracies, Minimum")
-pprint(minimum)
+# print("Word Accuracies, Average")
+# pprint(word_accuracies)
 
-print("Word Accuracies, Variance")
-pprint(variance)
+# print("Word Accuracies, Maximum")
+# pprint(maximum)
+#
+# print("Word Accuracies, Minimum")
+# pprint(minimum)
+
+# print("Word Accuracies, Variance")
+# pprint(variance)
 
 # Sequence Accuracies ##########################################################
 # Calculate the average word accuracy and sequence accuracy
@@ -122,17 +139,28 @@ for key in sequence_accuracies:
         maximum[key][subkey] = max(all_values)
         variance[key][subkey] = np.var(all_values)
 
-print("Sequence Accuracies, Average")
-pprint(sequence_accuracies)
+seq_acc_file = './seq_accuracies.txt'
 
-print("Sequence Accuracies, Maximum")
-pprint(maximum)
+with open(seq_acc_file, 'a') as f:
+    f.write("Level " + str(level)+"\n")
+    f.write("Sequence Accuracies, Average"+"\n")
+    f.write(str(sequence_accuracies)+"\n")
+    f.write("Sequence Accuracies, Maximum"+"\n")
+    f.write(str(maximum)+"\n")
+    f.write("Sequence Accuracies, Minimum"+"\n")
+    f.write(str(minimum)+"\n")
 
-print("Sequence Accuracies, Minimum")
-pprint(minimum)
-
-print("Sequence Accuracies, Variance")
-pprint(variance)
+# print("Sequence Accuracies, Average")
+# pprint(sequence_accuracies)
+#
+# print("Sequence Accuracies, Maximum")
+# pprint(maximum)
+#
+# print("Sequence Accuracies, Minimum")
+# pprint(minimum)
+#
+# print("Sequence Accuracies, Variance")
+# pprint(variance)
 
 # Probabilities ################################################################
 # Calculate the average probabilities, minimum, maximum prob and the variance
@@ -148,14 +176,25 @@ for key in probabilities:
         maximum[key][subkey] = max(all_values)
         variance[key][subkey] = np.var(all_values)
 
-print("Probabilities, Average")
-pprint(probabilities)
+prob_file = './probabilities.txt'
 
-print("Probabilities, Maximum")
-pprint(maximum)
+with open(seq_acc_file, 'a') as f:
+    f.write("Level " + str(level)+"\n")
+    f.write("Probabilities, Average"+"\n")
+    f.write(str(probabilities)+"\n")
+    f.write("Probabilities, Maximum"+"\n")
+    f.write(str(maximum)+"\n")
+    f.write("Probabilities, Minimum"+"\n")
+    f.write(str(minimum)+"\n")
 
-print("Probabilities, Minimum")
-pprint(minimum)
-
-print("Probabilities, Variance")
-pprint(variance)
+# print("Probabilities, Average")
+# pprint(probabilities)
+#
+# print("Probabilities, Maximum")
+# pprint(maximum)
+#
+# print("Probabilities, Minimum")
+# pprint(minimum)
+#
+# print("Probabilities, Variance")
+# pprint(variance)
