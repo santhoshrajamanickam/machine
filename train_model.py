@@ -142,6 +142,7 @@ for dataset in opt.monitor:
 # When chosen to use attentive guidance, check whether the data is correct for the first
 # example in the data set. We can assume that the other examples are then also correct.
 if opt.use_attention_loss or opt.attention_method == 'hard':
+
     if len(train) > 0:
         if 'attn' not in vars(train[0]):
             raise Exception("AttentionField not found in train data")
@@ -157,8 +158,8 @@ if opt.use_attention_loss or opt.attention_method == 'hard':
         tgt_len = len(vars(dev[0])['tgt']) - 1 # -1 for SOS
         attn_len = len(vars(dev[0])['attn']) - 1 # -1 for preprended ignore_index
         if attn_len != tgt_len:
-            for index, i in enumerate(train):
-                vars(train[index])['attn'] = vars(train[index])['attn'][:-1]
+            for index, i in enumerate(dev):
+                vars(dev[index])['attn'] = vars(dev[index])['attn'][:-1]
 
     for m in monitor_data.values():
         if len(m) > 0:
@@ -167,8 +168,8 @@ if opt.use_attention_loss or opt.attention_method == 'hard':
             tgt_len = len(vars(m[0])['tgt']) - 1 # -1 for SOS
             attn_len = len(vars(m[0])['attn']) - 1 # -1 for preprended ignore_index
             if attn_len != tgt_len:
-                for index, i in enumerate(train):
-                    vars(train[index])['attn'] = vars(train[index])['attn'][:-1]
+                for index, i in enumerate(m):
+                    vars(m[index])['attn'] = vars(m[index])['attn'][:-1]
 
 #################################################################################
 # prepare model
