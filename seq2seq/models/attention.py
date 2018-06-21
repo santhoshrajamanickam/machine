@@ -45,6 +45,9 @@ class Attention(nn.Module):
         self.mask = None
         self.method = self.get_method(method, dim)
 
+    def clean_memory(self):
+        self.attention_memory = []
+
     def set_mask(self, mask):
         """
         Sets indices to be masked
@@ -76,6 +79,8 @@ class Attention(nn.Module):
         attn.masked_fill_(mask, -float('inf'))
 
         attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
+        
+        self.attention_memory.append(attn)
 
         # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
         context = torch.bmm(attn, encoder_states)
