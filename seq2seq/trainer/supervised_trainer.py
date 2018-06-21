@@ -58,11 +58,11 @@ class SupervisedTrainer(object):
 
         self.logger = logging.getLogger(__name__)
 
-    def _train_batch(self, input_variable, input_lengths, target_variable, model, teacher_forcing_ratio):
+    def _train_batch(self, input_variable, input_lengths, target_variable, model, teacher_forcing_ratio, attention_forcing_ratio):
         loss = self.loss
 
         # Forward propagation
-        decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths, target_variable, teacher_forcing_ratio=teacher_forcing_ratio)
+        decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths, target_variable, teacher_forcing_ratio=teacher_forcing_ratio, attention_forcing_ratio=attention_forcing_ratio)
 
         losses = self.evaluator.compute_batch_loss(decoder_outputs, decoder_hidden, other, target_variable)
         
@@ -77,7 +77,7 @@ class SupervisedTrainer(object):
 
     def _train_epoches(self, data, model, n_epochs, start_epoch, start_step,
                        dev_data=None, monitor_data=[], teacher_forcing_ratio=0,
-                       top_k=5):
+                       attention_forcing_ratio=0, top_k=5):
         log = self.logger
 
         print_loss_total = defaultdict(float)  # Reset every print_every
@@ -133,7 +133,7 @@ class SupervisedTrainer(object):
 
                 input_variables, input_lengths, target_variables = self.get_batch_data(batch)
 
-                losses = self._train_batch(input_variables, input_lengths.tolist(), target_variables, model, teacher_forcing_ratio)
+                losses = self._train_batch(input_variables, input_lengths.tolist(), target_variables, model, teacher_forcing_ratio, attention_forcing_ratio)
 
                 # Record average loss
                 for loss in losses:
@@ -220,6 +220,7 @@ class SupervisedTrainer(object):
               resume=False, dev_data=None, 
               monitor_data={}, optimizer=None,
               teacher_forcing_ratio=0,
+              attention_forcing_ratio=0,
               learning_rate=0.001, checkpoint_path=None, top_k=5):
         """ Run training for a given model.
 
@@ -233,6 +234,7 @@ class SupervisedTrainer(object):
             optimizer (seq2seq.optim.Optimizer, optional): optimizer for training
                (default: Optimizer(pytorch.optim.Adam, max_grad_norm=5))
             teacher_forcing_ratio (float, optional): teaching forcing ratio (default 0)
+            attention_forcing_ratio (float, optional): attention forcing ratio (default 0)
             learing_rate (float, optional): learning rate used by the optimizer (default 0.001)
             checkpoint_path (str, optional): path to load checkpoint from in case training should be resumed
             top_k (int): how many models should be stored during training
@@ -274,6 +276,7 @@ class SupervisedTrainer(object):
                             start_epoch, step, dev_data=dev_data,
                             monitor_data=monitor_data,
                             teacher_forcing_ratio=teacher_forcing_ratio,
+                            attention_forcing_ratio=attention_forcing_ratio,
                             top_k=top_k)
         return model, logs
 

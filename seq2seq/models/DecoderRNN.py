@@ -46,6 +46,7 @@ class DecoderRNN(BaseRNN):
         - **teacher_forcing_ratio** (float): The probability that teacher forcing will be used. A random number is
           drawn uniformly from 0-1 for every decoding token, and if the sample is smaller than the given value,
           teacher forcing would be used (default is 0).
+        - **attention_forcing_ratio** (float): TODO: write short description
 
     Outputs: decoder_outputs, decoder_hidden, ret_dict
         - **decoder_outputs** (seq_len, batch, vocab_size): list of tensors with size (batch_size, vocab_size) containing
@@ -105,7 +106,7 @@ class DecoderRNN(BaseRNN):
             if self.full_focus:
                 self.ffocus_merge = nn.Linear(2*self.hidden_size, hidden_size)
 
-    def forward_step(self, input_var, hidden, encoder_outputs, function, **attention_method_kwargs):
+    def forward_step(self, input_var, hidden, encoder_outputs, function, use_attention_forcing=False, **attention_method_kwargs):
         """
         Performs one or multiple forward decoder steps.
         
@@ -130,7 +131,7 @@ class DecoderRNN(BaseRNN):
             if isinstance(hidden, tuple):
                 h, c = hidden
             # Apply the attention method to get the attention vector and weighted context vector. Provide decoder step for hard attention
-            context, attn = self.attention(h[-1:].transpose(0,1), encoder_outputs, **attention_method_kwargs) # transpose to get batch at the second index
+            context, attn = self.attention(h[-1:].transpose(0,1), encoder_outputs, use_attention_forcing, **attention_method_kwargs) # transpose to get batch at the second index
             combined_input = torch.cat((context, embedded), dim=2)
             if self.full_focus:
                 merged_input = F.relu(self.ffocus_merge(combined_input))
@@ -140,7 +141,7 @@ class DecoderRNN(BaseRNN):
         elif self.use_attention == 'post-rnn':
             output, hidden = self.rnn(embedded, hidden)
             # Apply the attention method to get the attention vector and weighted context vector. Provide decoder step for hard attention
-            context, attn = self.attention(output, encoder_outputs, **attention_method_kwargs)
+            context, attn = self.attention(output, encoder_outputs, use_attention_forcing, **attention_method_kwargs)
             output = torch.cat((context, output), dim=2)
 
         elif not self.use_attention:
@@ -152,18 +153,21 @@ class DecoderRNN(BaseRNN):
         return predicted_softmax, hidden, attn
 
     def forward(self, inputs=None, encoder_hidden=None, encoder_outputs=None,
-                    function=F.log_softmax, teacher_forcing_ratio=0, provided_attention=None):
+                function=F.log_softmax, teacher_forcing_ratio=0,
+                attention_forcing_ratio=0, provided_attention=None):
         self.attention.clean_memory()
         ret_dict = dict()
         if self.use_attention:
             ret_dict[DecoderRNN.KEY_ATTN_SCORE] = list()
 
+        #TODO: update validate_args
         inputs, batch_size, max_length = self._validate_args(inputs, encoder_hidden, encoder_outputs,
-                                                             function, teacher_forcing_ratio)
+                                                             function, teacher_forcing_ratio, attention_forcing_ratio)
         
         decoder_hidden = self._init_state(encoder_hidden)
 
         use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+        use_attention_forcing = True if random.random() < attention_forcing_ratio else False
 
         decoder_outputs = []
         sequence_symbols = []
@@ -185,7 +189,7 @@ class DecoderRNN(BaseRNN):
 
         # Prepare extra arguments for attention method
         attention_method_kwargs = {}
-        if self.attention and isinstance(self.attention.method, HardGuidance):
+        if self.attention and isinstance(self.attention.method, HardGuidance) or use_attention_forcing:
             attention_method_kwargs['provided_attention'] = provided_attention
 
         # When we use pre-rnn attention we must unroll the decoder. We need to calculate the attention based on
@@ -209,10 +213,11 @@ class DecoderRNN(BaseRNN):
                     decoder_input = symbols
 
                 # Perform one forward step
-                if self.attention and isinstance(self.attention.method, HardGuidance):
+                if self.attention and isinstance(self.attention.method, HardGuidance) or use_attention_forcing:
                     attention_method_kwargs['step'] = di
                 decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
-                                                                         function=function, **attention_method_kwargs)
+                                                                            function=function, use_attention_forcing=use_attention_forcing,
+                                                                              **attention_method_kwargs)
                 # Remove the unnecessary dimension.
                 step_output = decoder_output.squeeze(1)
                 # Get the actual symbol
@@ -224,9 +229,11 @@ class DecoderRNN(BaseRNN):
             decoder_input = inputs[:, :-1]
 
             # Forward step without unrolling
-            if self.attention and isinstance(self.attention.method, HardGuidance):
+            if self.attention and isinstance(self.attention.method, HardGuidance) or use_attention_forcing:
                 attention_method_kwargs['step'] = -1
-            decoder_output, decoder_hidden, attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs, function=function, **attention_method_kwargs)
+            decoder_output, decoder_hidden, attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
+                                                                     function=function, use_attention_forcing=use_attention_forcing,
+                                                                     **attention_method_kwargs)
 
             for di in range(decoder_output.size(1)):
                 step_output = decoder_output[:, di, :]
@@ -259,7 +266,7 @@ class DecoderRNN(BaseRNN):
             h = torch.cat([h[0:h.size(0):2], h[1:h.size(0):2]], 2)
         return h
 
-    def _validate_args(self, inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio):
+    def _validate_args(self, inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio, attention_forcing_ratio):
         if self.use_attention:
             if encoder_outputs is None:
                 raise ValueError("Argument encoder_outputs cannot be None when attention is used.")
