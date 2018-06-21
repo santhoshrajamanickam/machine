@@ -20,6 +20,7 @@ class Seq2seq(nn.Module):
         - **teacher_forcing_ratio** (int, optional): The probability that teacher forcing will be used. A random number
           is drawn uniformly from 0-1 for every decoding token, and if the sample is smaller than the given value,
           teacher forcing would be used (default is 0)
+        - **attention_forcing_ratio** (int, optional): TODO:write short description
 
     Outputs: decoder_outputs, decoder_hidden, ret_dict
         - **decoder_outputs** (batch): batch-length list of tensors with size (max_length, hidden_size) containing the
@@ -44,7 +45,7 @@ class Seq2seq(nn.Module):
         self.decoder.rnn.flatten_parameters()
 
     def forward(self, input_variable, input_lengths=None, target_variables=None,
-                teacher_forcing_ratio=0):
+                teacher_forcing_ratio=0, attention_forcing_ratio=0):
         # Unpack target variables
         try:
             target_output = target_variables.get('decoder_output', None)
@@ -54,12 +55,12 @@ class Seq2seq(nn.Module):
             target_output = None
             provided_attention = None
 
-
         encoder_outputs, encoder_hidden = self.encoder(input_variable, input_lengths)
         result = self.decoder(inputs=target_output,
                               encoder_hidden=encoder_hidden,
                               encoder_outputs=encoder_outputs,
                               function=self.decode_function,
                               teacher_forcing_ratio=teacher_forcing_ratio,
+                              attention_forcing_ratio=attention_forcing_ratio,
                               provided_attention=provided_attention)
         return result

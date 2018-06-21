@@ -46,6 +46,7 @@ parser.add_argument('--tgt_vocab', type=int, help='target vocabulary size', defa
 parser.add_argument('--dropout_p_encoder', type=float, help='Dropout probability for the encoder', default=0.2)
 parser.add_argument('--dropout_p_decoder', type=float, help='Dropout probability for the decoder', default=0.2)
 parser.add_argument('--teacher_forcing_ratio', type=float, help='Teacher forcing ratio', default=0.2)
+parser.add_argument('--attention_forcing_ratio', type=float, help='Attention forcing ratio', default=0.2)
 parser.add_argument('--attention', choices=['pre-rnn', 'post-rnn'], default=False)
 parser.add_argument('--attention_method', choices=['dot', 'mlp', 'concat', 'hard'], default=None)
 parser.add_argument('--use_attention_loss', action='store_true')
@@ -105,7 +106,7 @@ tgt = TargetField(include_eos=use_output_eos)
 
 tabular_data_fields = [('src', src), ('tgt', tgt)]
 
-if opt.use_attention_loss or opt.attention_method == 'hard':
+if opt.use_attention_loss or opt.attention_method == 'hard' or opt.attention_forcing_ratio:
     attn = AttentionField(use_vocab=False, ignore_index=IGNORE_INDEX)
     tabular_data_fields.append(('attn', attn))
 
@@ -141,7 +142,7 @@ for dataset in opt.monitor:
 
 # When chosen to use attentive guidance, check whether the data is correct for the first
 # example in the data set. We can assume that the other examples are then also correct.
-if opt.use_attention_loss or opt.attention_method == 'hard':
+if opt.use_attention_loss or opt.attention_method == 'hard' or opt.attention_forcing_ratio:
 
     if len(train) > 0:
         if 'attn' not in vars(train[0]):
@@ -281,6 +282,7 @@ seq2seq, logs = t.train(seq2seq, train,
                   monitor_data=monitor_data,
                   optimizer=opt.optim,
                   teacher_forcing_ratio=opt.teacher_forcing_ratio,
+                  attention_forcing_ratio=opt.attention_forcing_ratio,
                   learning_rate=opt.lr,
                   resume=opt.resume,
                   checkpoint_path=checkpoint_path)
