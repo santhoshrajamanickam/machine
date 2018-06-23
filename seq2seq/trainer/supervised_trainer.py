@@ -33,8 +33,7 @@ class SupervisedTrainer(object):
         print_every (int, optional): number of iterations to print after, (default: 100)
     """
     def __init__(self, expt_dir='experiment', loss=[NLLLoss()], loss_weights=None, metrics=[], batch_size=64, eval_batch_size=128,
-                 random_seed=None,
-                 checkpoint_every=100, print_every=100):
+                 random_seed=None, checkpoint_every=100, print_every=100, guidance_ratio=None):
         self._trainer = "Simple Trainer"
         self.random_seed = random_seed
         if random_seed is not None:
@@ -48,6 +47,13 @@ class SupervisedTrainer(object):
         self.optimizer = None
         self.checkpoint_every = checkpoint_every
         self.print_every = print_every
+
+        if len(loss) == 1:
+            self.guidance_ratio = 0
+        elif len(loss) == 2 and guidance_ratio == None:
+            self.guidance_ratio = 1
+        else:
+            self.guidance_ratio = guidance_ratio
 
         if not os.path.isabs(expt_dir):
             expt_dir = os.path.join(os.getcwd(), expt_dir)
@@ -68,6 +74,9 @@ class SupervisedTrainer(object):
         
         # Backward propagation
         for i, loss in enumerate(losses, 0):
+            if isinstance(loss, AttentionLoss):
+                if random.random() > self.guidance_ratio:
+                    continue
             loss.scale_loss(self.loss_weights[i])
             loss.backward(retain_graph=True)
         self.optimizer.step()
