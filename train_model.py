@@ -46,7 +46,8 @@ parser.add_argument('--tgt_vocab', type=int, help='target vocabulary size', defa
 parser.add_argument('--dropout_p_encoder', type=float, help='Dropout probability for the encoder', default=0.2)
 parser.add_argument('--dropout_p_decoder', type=float, help='Dropout probability for the decoder', default=0.2)
 parser.add_argument('--teacher_forcing_ratio', type=float, help='Teacher forcing ratio', default=0.2)
-parser.add_argument('--attention_forcing_ratio', type=float, help='Attention forcing ratio', default=0.2)
+parser.add_argument('--attention_forcing_ratio', type=float, help='Attention forcing ratio', default=0.0)
+parser.add_argument('--guidance_ratio', type=float, help='Attentive guidance ratio', default=1.0)
 parser.add_argument('--attention', choices=['pre-rnn', 'post-rnn'], default=False)
 parser.add_argument('--attention_method', choices=['dot', 'mlp', 'concat', 'hard'], default=None)
 parser.add_argument('--use_attention_loss', action='store_true')
@@ -57,6 +58,7 @@ parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
 parser.add_argument('--eval_batch_size', type=int, help='Batch size', default=128)
 parser.add_argument('--lr', type=float, help='Learning rate, recommended settings.\nrecommended settings: adam=0.001 adadelta=1.0 adamax=0.002 rmsprop=0.01 sgd=0.1', default=0.001)
 parser.add_argument('--ignore_output_eos', action='store_true', help='Ignore end of sequence token during training and evaluation')
+parser.add_argument('--log_file', default=None)
 
 parser.add_argument('--load_checkpoint', help='The name of the checkpoint to load, usually an encoded time string')
 parser.add_argument('--save_every', type=int, help='Every how many batches the model should be saved', default=100)
@@ -71,8 +73,12 @@ IGNORE_INDEX=-1
 use_output_eos = not opt.ignore_output_eos
 
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
-logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
+if opt.log_file is None:
+    logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
+else:
+    logging.basicConfig(filename=opt.log_file, format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
 logging.info(opt)
+
 
 
 if opt.resume and not opt.load_checkpoint:
@@ -275,7 +281,8 @@ t = SupervisedTrainer(loss=losses, metrics=metrics,
                       batch_size=opt.batch_size,
                       eval_batch_size=opt.eval_batch_size,
                       checkpoint_every=opt.save_every,
-                      print_every=opt.print_every, expt_dir=opt.output_dir)
+                      print_every=opt.print_every, expt_dir=opt.output_dir,
+                      guidance_ratio=opt.guidance_ratio)
 
 seq2seq, logs = t.train(seq2seq, train, 
                   num_epochs=opt.epochs, dev_data=dev,
