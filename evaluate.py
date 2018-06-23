@@ -149,3 +149,16 @@ losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=da
 total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
 
 logging.info(log_msg)
+
+for i in range(51):
+    samples = [ s for s in test if len(s.tgt) == i]
+    if len(samples) == 0:
+        continue
+    test_temp = torchtext.data.Dataset(samples, fields=tabular_data_fields)
+    losses, metrics = evaluator.evaluate(model=seq2seq, data=test_temp, get_batch_data=data_func)
+    total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
+    if opt.ignore_output_eos:
+        length = i
+    else:
+        length = i-1
+    logging.info("Length {}, {}".format(length, log_msg))
