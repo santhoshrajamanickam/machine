@@ -30,7 +30,7 @@ parser.add_argument('--cuda_device', default=0, type=int, help='set cuda device 
 parser.add_argument('--max_len', type=int, help='Maximum sequence length', default=50)
 parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
 parser.add_argument('--log-level', default='info', help='Logging level.')
-
+parser.add_argument('--log_file', default=None)
 parser.add_argument('--attention', choices=['pre-rnn', 'post-rnn'], default=False)
 parser.add_argument('--attention_method', choices=['dot', 'mlp', 'hard'], default=None)
 parser.add_argument('--use_attention_loss', action='store_true')
@@ -41,7 +41,11 @@ parser.add_argument('--ignore_output_eos', action='store_true', help='Ignore end
 opt = parser.parse_args()
 
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
-logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
+if opt.log_file is None:
+    logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
+else:
+    logging.basicConfig(filename=opt.log_file, format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
+
 logging.info(opt)
 
 IGNORE_INDEX=-1
@@ -144,21 +148,19 @@ data_func = SupervisedTrainer.get_batch_data
 # Evaluate model on test set
 
 evaluator = Evaluator(batch_size=opt.batch_size, loss=losses, metrics=metrics)
-losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func)
-
+losses, metrics, avg_length = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=tgt.vocab, input_vocab=src.vocab)
 total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
-
 logging.info(log_msg)
 
-for i in range(51):
+for i in range(25, 51):
     samples = [ s for s in test if len(s.tgt) == i]
     if len(samples) == 0:
         continue
     test_temp = torchtext.data.Dataset(samples, fields=tabular_data_fields)
-    losses, metrics = evaluator.evaluate(model=seq2seq, data=test_temp, get_batch_data=data_func)
+    losses, metrics, avg_length = evaluator.evaluate(model=seq2seq, data=test_temp, get_batch_data=data_func, vocab=tgt.vocab, input_vocab=src.vocab)
     total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
     if opt.ignore_output_eos:
-        length = i
+        length = i - 1
     else:
-        length = i-1
+        length = i - 2
     logging.info("Length {}, {}".format(length, log_msg))
