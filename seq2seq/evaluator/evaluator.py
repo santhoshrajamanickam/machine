@@ -3,7 +3,12 @@ from __future__ import print_function, division
 import torch
 import torchtext
 
+import numpy as np
+import seaborn as sns
+import matplotlib.pylab as plt
+
 import seq2seq
+import numpy as np
 from seq2seq.loss import NLLLoss
 from seq2seq.metrics import WordAccuracy, SequenceAccuracy
 
@@ -82,7 +87,7 @@ class Evaluator(object):
 
         return losses
 
-    def evaluate(self, model, data, get_batch_data):
+    def evaluate(self, model, data, get_batch_data, vocab, input_vocab):
         """ Evaluate a model on given dataset and return performance.
 
         Args:
@@ -106,6 +111,8 @@ class Evaluator(object):
         for metric in metrics:
             metric.reset()
 
+        lengths = []
+
         # create batch iterator
         iterator_device = torch.cuda.current_device() if torch.cuda.is_available() else -1
         batch_iterator = torchtext.data.BucketIterator(
@@ -115,17 +122,62 @@ class Evaluator(object):
 
         # loop over batches
         with torch.no_grad():
+            i = 0
+            j = 0
             for batch in batch_iterator:
                 input_variable, input_lengths, target_variable = get_batch_data(batch)
-
                 decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable)
+                
+                # decoded = []
+                # for token in decoder_outputs:
+                #     value, index = torch.topk(token, 1)
+                #     index = index.item()
+                #     token = vocab.itos[index]
+                #     if token == "<eos>":
+                #         break
+                #     decoded.append(token)
+
+                # input_sequence = []
+                # for token in list(target_variable['encoder_input'].numpy())[0]:
+                #     token = input_vocab.itos[token]
+                #     if token == "<eos>":
+                #         break  
+                #     input_sequence.append(token)
+
+                # target = []
+                # for token in list(target_variable['decoder_output'].numpy())[0][1:]:
+                #     token = vocab.itos[token]
+                #     if token == "<eos>":
+                #         break  
+                #     target.append(token)
+
+                # if True: #target != decoded:
+                #     j += 1
+                #     attention = np.array([ l[0].numpy()[0] for l in model.decoder.attention.attention_memory])
+
+
+
+                #     fig, axes = plt.subplots(figsize=(8,6))
+                #     ax = sns.heatmap(attention, xticklabels=input_sequence, yticklabels=decoded + ["<EOS>"], cmap="Reds", annot_kws={"size": 30})
+                #     #plt.text(-0.5, -3, " ".join(target[:15]))
+                #     #plt.text(-0.5, -2, " ".join(target[15:30]))
+                #     #plt.text(-0.5, -1, " ".join(target[30:35]))
+                #     #plt.text(-0.5, -0.5, " ".join(target[35:50]))
+                #     fig.savefig('plots/length{}_{}.png'.format(len(target), i))
+
+                #     if j == 25:
+                #         break
+
+                #lengths.append(len(decoded))
 
                 # Compute metric(s) over one batch
                 metrics = self.update_batch_metrics(metrics, other, target_variable)
                 
                 # Compute loss(es) over one batch
                 losses = self.update_loss(losses, decoder_outputs, decoder_hidden, other, target_variable)
+                i += 1
+
 
         model.train(previous_train_mode)
 
-        return losses, metrics
+        return losses, metrics, 0 # sum(lengths) / len(lengths)
