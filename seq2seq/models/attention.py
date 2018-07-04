@@ -83,6 +83,7 @@ class Attention(nn.Module):
 
         self.last_attention.append(attn)
 
+        print(attn)
         # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
         context = torch.bmm(attn, encoder_states)
 
@@ -269,16 +270,20 @@ class DiffusedGuidance(nn.Module):
         return self.method(decoder_states, encoder_states, step, provided_attention)
 
     def diffuse(self, attention):
-        for i in range(attention.shape[2]-1):
-            # Uniform attention
-            if self.level == -1:
-                attention[0][0][i] = 1 / (attention.shape[2] - 1)
-            # Diffuse the hard attention
-            else:
-                if attention[0][0][i].item() == 1:
-                    attention[0][0][i] = 1 - self.level
+        for i in range(attention.shape[1]):
+            # Don't mess with the attention on the EOS token
+            if attention[i][0][-1].item() == 1:
+                continue
+            for j in range(attention.shape[2]-1):
+                # Uniform attention
+                if self.level == -1:
+                    attention[i][0][j] = 1 / (attention.shape[2] - 1)
+                # Diffuse the hard attention
                 else:
-                    attention[0][0][i] = self.level / (attention.shape[2] - 2)
+                    if attention[i][0][j].item() == 1:
+                        attention[i][0][j] = 1 - self.level
+                    else:
+                        attention[i][0][j] = self.level / (attention.shape[2] - 2)
         return attention
 
 
