@@ -44,6 +44,10 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         self.mask = None
         self.method = self.get_method(method, dim)
+        if method != "hard":
+            self.attention_forcer = self.get_method("hard", dim)
+        else:
+            self.attention_forcer = None
 
     def clean_memory(self):
         self.attention_memory = []
@@ -57,8 +61,7 @@ class Attention(nn.Module):
         """
         self.mask = mask
 
-    def forward(self, decoder_states, encoder_states, use_attention_forcing, **attention_method_kwargs):
-
+    def forward(self, decoder_states, encoder_states, use_attention_forcing=False, **attention_method_kwargs):
         batch_size = decoder_states.size(0)
         decoder_states_size = decoder_states.size(2)
         input_size = encoder_states.size(1)
@@ -67,8 +70,8 @@ class Attention(nn.Module):
         mask = encoder_states.eq(0.)[:, :, :1].transpose(1, 2)
 
         # Compute attention vals
-        if use_attention_forcing:
-            attn = attention_force(decoder_states, encoder_states, **attention_method_kwargs)
+        if use_attention_forcing and self.attention_forcer is not None:
+            attn = self.attention_forcer(decoder_states, encoder_states, **attention_method_kwargs)
         else:
             attn = self.method(decoder_states, encoder_states, **attention_method_kwargs)
 
@@ -241,30 +244,3 @@ class HardGuidance(nn.Module):
         attention_scores = attention_scores
 
         return attention_scores
-
-
-def attention_force(decoder_states, encoder_states, step, provided_attention):
-    # decoder_states --> (batch, dec_seqlen, hl_size)
-    # encoder_states --> (batch, enc_seqlen, hl_size)
-    batch_size, enc_seqlen, _ = encoder_states.size()
-    _, dec_seqlen, _ = decoder_states.size()
-
-    attention_indices = provided_attention.detach()
-    # If we have shorter examples in a batch, attend the PAD outputs to the first encoder state
-    attention_indices.masked_fill_(attention_indices.eq(-1), 0)
-
-    # In the case of unrolled RNN, select only one column
-    if step != -1:
-        attention_indices = attention_indices[:, step]
-
-    # Add a (second and) third dimension
-    # In the case of rolled RNN: (batch_size x dec_seqlen) -> (batch_size x dec_seqlen x 1)
-    # In the case of unrolled:   (batch_size)              -> (batch_size x 1          x 1)
-    attention_indices = attention_indices.contiguous().view(batch_size, -1, 1)
-    # Initialize attention vectors. These are the pre-softmax scores, so any
-    # -inf will become 0 (if there is at least one value not -inf)
-    attention_scores = torch.full([batch_size, dec_seqlen, enc_seqlen], fill_value=-float('inf'), device=device)
-    attention_scores = attention_scores.scatter_(dim=2, index=attention_indices, value=1)
-    attention_scores = attention_scores
-
-    return attention_scores
