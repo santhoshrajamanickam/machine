@@ -84,12 +84,13 @@ class Evaluator(object):
 
         return losses
 
-    def evaluate(self, model, data, get_batch_data, vocab=None, output=None, baseline_model=None):
+    def evaluate(self, model, data, get_batch_data, baseline_model=None):
         """ Evaluate a model on given dataset and return performance.
 
         Args:
             model (seq2seq.models): model to evaluate
             data (seq2seq.dataset.dataset.Dataset): dataset to evaluate against
+            baseline_model: pretrained baseline model used to transfer attention
 
         Returns:
             loss (float): loss of the given model on the given dataset
@@ -115,8 +116,6 @@ class Evaluator(object):
             sort=True, sort_key=lambda x: len(x.src),
             device=iterator_device, train=False)
 
-        if output: all_prob_steps = []
-
         # loop over batches
         with torch.no_grad():
             for batch in batch_iterator:
@@ -127,19 +126,6 @@ class Evaluator(object):
                 else:
                     predetermined_attention = None
 
-                if output:
-                    model.decode_function = torch.nn.functional.softmax
-                    decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable, baseline_provided_attention=predetermined_attention)
-                    prob_steps = []
-                    for probs in decoder_outputs:
-                        probs = list(zip(vocab.itos, probs.numpy()[0]))[3:]
-                        probs = list(reversed(sorted(probs, key=lambda x: x[1])))
-                        probs = " ".join(["{}-{:0.4f}".format(w, v) for w, v in probs])
-                        prob_steps.append(probs)
-                    prob_steps = "\t".join(prob_steps)
-                    model.decode_function = torch.nn.functional.log_softmax
-                    all_prob_steps.append(prob_steps)
-
                 decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths.tolist(), target_variable, baseline_provided_attention=predetermined_attention)
                 # Compute metric(s) over one batch
                 metrics = self.update_batch_metrics(metrics, other, target_variable)
@@ -149,5 +135,4 @@ class Evaluator(object):
 
         model.train(previous_train_mode)
 
-        if output: return losses, metrics, all_prob_steps
-        else: return losses, metrics
+        return losses, metrics
