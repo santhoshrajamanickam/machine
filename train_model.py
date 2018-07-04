@@ -79,8 +79,6 @@ else:
     logging.basicConfig(filename=opt.log_file, format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
 logging.info(opt)
 
-
-
 if opt.resume and not opt.load_checkpoint:
     parser.error('load_checkpoint argument is required to resume training from checkpoint')
 
@@ -104,6 +102,10 @@ if opt.attention:
     if not opt.attention_method:
         logging.info("No attention method provided. Using DOT method.")
         opt.attention_method = 'dot'
+
+if opt.use_attention_loss and opt.attention_forcing_ratio != 0.0:
+    logging.error("Attention forcing does not combine with attentive guidance.")
+    opt.attention_forcing_ratio = 0
 
 ############################################################################
 # Prepare dataset
