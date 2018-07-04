@@ -11,7 +11,7 @@ from collections import defaultdict, Counter
 
 def extract_probabilities(foldername, subfolder, filename, model, sample):
     subfolder = os.path.join(foldername, subfolder)
-    command = "python3 machine/process_output.py --heldout {}/".format(subfolder)+\
+    command = "python3 machine2/process_output.py --heldout {}/".format(subfolder)+\
               "{}.tsv --output attacks-evaluation-".format(filename)+\
               "output/model{}/sample{}/{}_output.tsv".format(model, sample+1, filename)
     output = subprocess.check_output(command, shell=True)
@@ -37,8 +37,12 @@ def extract_accuracies(foldername, subfolder, filename, model, sample):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--level', default=1, help='number of swappings', type=int)
+parser.add_argument('--seq_length', default=1, help='sequence length', type=int)
+parser.add_argument('--num_models', default=1, help='number of models', type=int)
 opt = parser.parse_args()
 level = opt.level
+seq_length = str(opt.seq_length)
+num_models = opt.num_models
 
 model = 1
 probabilities = defaultdict(lambda: defaultdict(list))
@@ -46,12 +50,12 @@ word_accuracies = defaultdict(lambda: defaultdict(list))
 sequence_accuracies = defaultdict(lambda: defaultdict(list))
 
 # Names of all the data tsv files
-heldout_compositions = ["heldout_compositions5_no_eos", "heldout_compositions5_attacks", "heldout_compositions5_attacks_outputs"]
-heldout_tables = ["heldout_tables5_no_eos", "heldout_tables5_attacks", "heldout_tables5_attacks_outputs"]
-new_compositions = ["new_compositions5_no_eos", "new_compositions5_attacks", "new_compositions5_attacks_outputs"]
+heldout_compositions = ["heldout_compositions"+seq_length+"_no_eos", "heldout_compositions"+seq_length+"_attacks", "heldout_compositions"+seq_length+"_attacks_outputs"]
+heldout_tables = ["heldout_tables"+seq_length+"_no_eos", "heldout_tables"+seq_length+"_attacks", "heldout_tables"+seq_length+"_attacks_outputs"]
+new_compositions = ["new_compositions"+seq_length+"_no_eos", "new_compositions"+seq_length+"_attacks", "new_compositions"+seq_length+"_attacks_outputs"]
 
 # For every model
-for j in range(1, 6):
+for j in range(1, num_models+1):
     model = j
 
     foldername = "machine-tasks/LookupTables/lookup-3bit/longer_compositions/llonger_compositions/"
@@ -62,8 +66,13 @@ for j in range(1, 6):
     # For every sample folder in the data
     for i, subfolder in enumerate(folders):
         # Skip sample1, the model was trained on this
-        if i == 0:
+        if subfolder == 'sample1' or subfolder == '.DS_Store' :
+            # print(subfolder)
             continue
+
+        # print(subfolder)
+        # print(i)
+        i-=1
 
         # Gather all the probability mass averages using the process_output script
         for filename in heldout_compositions:
@@ -104,6 +113,7 @@ for key in word_accuracies:
 word_acc_file = './word_accuracies.txt'
 
 with open(word_acc_file, 'a') as f:
+    f.write("Sequence Length" + seq_length +"\n")
     f.write("Level " + str(level)+"\n")
     f.write("Word Accuracies, Average"+"\n")
     f.write(str(word_accuracies)+"\n")
@@ -142,6 +152,7 @@ for key in sequence_accuracies:
 seq_acc_file = './seq_accuracies.txt'
 
 with open(seq_acc_file, 'a') as f:
+    f.write("Sequence Length" + seq_length + "\n")
     f.write("Level " + str(level)+"\n")
     f.write("Sequence Accuracies, Average"+"\n")
     f.write(str(sequence_accuracies)+"\n")
@@ -178,7 +189,8 @@ for key in probabilities:
 
 prob_file = './probabilities.txt'
 
-with open(seq_acc_file, 'a') as f:
+with open(prob_file, 'a') as f:
+    f.write("Sequence Length" + seq_length + "\n")
     f.write("Level " + str(level)+"\n")
     f.write("Probabilities, Average"+"\n")
     f.write(str(probabilities)+"\n")
