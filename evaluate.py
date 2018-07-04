@@ -36,7 +36,6 @@ parser.add_argument('--level', default=0)
 parser.add_argument('--attention', choices=['pre-rnn', 'post-rnn'], default=False)
 parser.add_argument('--attention_method', choices=['dot', 'mlp', 'hard', 'diffused', 'baseline'], default=None)
 parser.add_argument('--use_attention_loss', action='store_true')
-parser.add_argument('--output', action='store_true')
 parser.add_argument('--output_dir')
 parser.add_argument('--scale_attention_loss', type=float, default=1.)
 parser.add_argument('--ignore_output_eos', action='store_true', help='Ignore end of sequence token during training and evaluation')
@@ -166,13 +165,13 @@ data_func = SupervisedTrainer.get_batch_data
 
 evaluator = Evaluator(batch_size=opt.batch_size, loss=losses, metrics=metrics)
 
-if opt.output:
-    losses, metrics, probs = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output, baseline_model=baseline_seq2seq)
-    filename = "{}_output.tsv".format(opt.test_data.split('/')[-1].split(".")[0])
-    with open(os.path.join(opt.output_dir, filename), 'w') as f:
-        f.write("\n".join(probs))
-else:
-    losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output, baseline_model=baseline_seq2seq)    
+# if opt.output:
+#     losses, metrics, probs = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=output_vocab, output=opt.output, baseline_model=baseline_seq2seq)
+#     filename = "{}_output.tsv".format(opt.test_data.split('/')[-1].split(".")[0])
+#     with open(os.path.join(opt.output_dir, filename), 'w') as f:
+#         f.write("\n".join(probs))
+# else:
+losses, metrics = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, baseline_model=baseline_seq2seq)    
 
 total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
 
