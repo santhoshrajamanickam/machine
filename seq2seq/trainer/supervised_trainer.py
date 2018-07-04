@@ -48,8 +48,11 @@ class SupervisedTrainer(object):
         self.checkpoint_every = checkpoint_every
         self.print_every = print_every
 
-        if len(loss) == 1:
+        # If there is no attention loss, do not apply guidance forcing
+        if len(loss) == 1 and isinstance(loss[0], NLLLoss):
             self.guidance_ratio = 0
+        # If guidance ratio is not initialised, but the attention loss was added
+        # use full guidance
         elif len(loss) == 2 and guidance_ratio == None:
             self.guidance_ratio = 1
         else:
@@ -74,6 +77,7 @@ class SupervisedTrainer(object):
         
         # Backward propagation
         for i, loss in enumerate(losses, 0):
+            # If the attention is AttentionLoss, use guidance forcing
             if isinstance(loss, AttentionLoss):
                 if random.random() > self.guidance_ratio:
                     continue
