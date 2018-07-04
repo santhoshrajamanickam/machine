@@ -1,6 +1,7 @@
 import os
 import argparse
 import logging
+from collections import defaultdict
 
 import torch
 import torchtext
@@ -129,7 +130,8 @@ if opt.use_attention_loss:
 for loss in losses:
     loss.to(device)
 
-metrics = [WordAccuracy(ignore_index=pad), SequenceAccuracy(ignore_index=pad), FinalTargetAccuracy(ignore_index=pad, eos_id=tgt.eos_id)]
+metrics = [WordAccuracy(ignore_index=pad), SequenceAccuracy(ignore_index=pad),
+           FinalTargetAccuracy(ignore_index=pad, eos_id=tgt.eos_id)]
 # Since we need the actual tokens to determine k-grammar accuracy,
 # we also provide the input and output vocab and relevant special symbols
 # metrics.append(SymbolRewritingAccuracy(
@@ -146,21 +148,27 @@ data_func = SupervisedTrainer.get_batch_data
 
 #################################################################################
 # Evaluate model on test set
-
-evaluator = Evaluator(batch_size=opt.batch_size, loss=losses, metrics=metrics)
-losses, metrics, avg_length = evaluator.evaluate(model=seq2seq, data=test, get_batch_data=data_func, vocab=tgt.vocab, input_vocab=src.vocab)
+evaluator = Evaluator(batch_size=opt.batch_size, loss=losses, 
+                      metrics=metrics)
+losses, metrics = evaluator.evaluate(model=seq2seq, data=test,
+                                     get_batch_data=data_func)
 total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
 logging.info(log_msg)
 
-for i in range(25, 51):
-    samples = [ s for s in test if len(s.tgt) == i]
-    if len(samples) == 0:
-        continue
-    test_temp = torchtext.data.Dataset(samples, fields=tabular_data_fields)
-    losses, metrics, avg_length = evaluator.evaluate(model=seq2seq, data=test_temp, get_batch_data=data_func, vocab=tgt.vocab, input_vocab=src.vocab)
+# Gather test samples by length
+samples_by_length = defaultdict(list)
+for sample in test:
+    samples_by_length[len(sample.tgt)].append(sample)
+
+# Per length, calculate the accuracies
+for length, samples_of_length in samples_by_length.items():
+    test_temp = torchtext.data.Dataset(samples_of_length,
+                                       fields=tabular_data_fields)
+    losses, metrics = evaluator.evaluate(model=seq2seq, data=test_temp,
+                                         get_batch_data=data_func)
     total_loss, log_msg, _ = SupervisedTrainer.get_losses(losses, metrics, 0)
     if opt.ignore_output_eos:
-        length = i - 1
+        length = length - 1
     else:
-        length = i - 2
+        length = length - 2
     logging.info("Length {}, {}".format(length, log_msg))
